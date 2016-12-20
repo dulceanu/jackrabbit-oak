@@ -433,7 +433,7 @@ public class SegmentNodeStoreService {
                 .withGCNodeWriteMonitor(configuration.getGCProcessLog());
 
         // Build the FileStore
-        FileStoreBuilder builder = fileStoreBuilder(configuration.getDirectory())
+        FileStoreBuilder builder = fileStoreBuilder(configuration.getSegmentDirectory())
                 .withSegmentCacheSize(configuration.getSegmentCacheSize())
                 .withStringCacheSize(configuration.getStringCacheSize())
                 .withTemplateCacheSize(configuration.getTemplateCacheSize())
@@ -790,8 +790,8 @@ class Configuration {
         return root;
     }
 
-    File getDirectory() {
-        return new File(getBaseDirectory(), appendRole("segmentstore"));
+    File getSegmentDirectory() {
+        return new File(getRootDirectory(), appendRole("segmentstore"));
     }
 
     File getBackupDirectory() {
@@ -799,7 +799,7 @@ class Configuration {
         if (backupDirectory != null) {
             return new File(backupDirectory);
         }
-        return new File(getBaseDirectory(), appendRole("segmentstore-backup"));
+        return new File(getRootDirectory(), appendRole("segmentstore-backup"));
     }
 
     int getSegmentCacheSize() {
@@ -904,14 +904,6 @@ class Configuration {
         } else {
             return name + "-" + role;
         }
-    }
-
-    private File getBaseDirectory() {
-        String directory = property(DIRECTORY);
-        if (directory != null) {
-            return new File(directory);
-        }
-        return new File("tarmk");
     }
 
     private String getCacheSize(String propertyName) {
