@@ -156,7 +156,7 @@ public class SegmentNodeStoreService {
 
     @Property(
             label = "Repository Home Directory",
-            description = "Directory for storing (in separate sub-directories) tar files, cache data, indices, etc. "
+            description = "Path on the file system where repository data will be stored. "
                     + "Defaults to the value of the framework property 'repository.home' or to 'repository' "
                     + "if that is neither specified."
     )
