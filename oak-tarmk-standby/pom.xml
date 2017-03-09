@@ -83,6 +83,7 @@
       <plugin>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
+        <!-- change heap size to 2G to see the test failing -->
           <argLine>-Xmx4G</argLine>
           <systemPropertyVariables>
             <standby.server.port>${standby.server.port}</standby.server.port>

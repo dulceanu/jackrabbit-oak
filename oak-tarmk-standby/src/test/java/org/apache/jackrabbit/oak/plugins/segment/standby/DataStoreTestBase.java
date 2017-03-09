@@ -89,7 +89,7 @@ public class DataStoreTestBase extends TestBase {
 
     @Test
     public void testSync() throws Exception {
-        final int blobSize = 50 * MB;
+        final int blobSize = 512 * MB;
         FileStore primary = getPrimary();
         FileStore secondary = getSecondary();
 
