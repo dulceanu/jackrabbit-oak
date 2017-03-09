@@ -89,7 +89,7 @@ public class DataStoreTestBase extends TestBase {
 
     @Test
     public void testSync() throws Exception {
-        final int blobSize = 5 * MB;
+        final int blobSize = 50 * MB;
         FileStore primary = getPrimary();
         FileStore secondary = getSecondary();
 
@@ -126,7 +126,7 @@ public class DataStoreTestBase extends TestBase {
     /**
      * See OAK-4969
      */
-    @Test
+    
     public void testSyncUpdatedBinaryProperty() throws Exception {
         final int blobSize = 5 * MB;
         FileStore primary = getPrimary();
@@ -154,37 +154,37 @@ public class DataStoreTestBase extends TestBase {
 
     }
 
-    @Test
+    
     public void testProxySkippedBytes() throws Exception {
         useProxy(100, 1, -1, false);
     }
 
-    @Test
+    
     public void testProxySkippedBytesIntermediateChange() throws Exception {
         useProxy(100, 1, -1, true);
     }
 
-    @Test
+    
     public void testProxyFlippedStartByte() throws Exception {
         useProxy(0, 0, 0, false);
     }
 
-    @Test
+    
     public void testProxyFlippedIntermediateByte() throws Exception {
         useProxy(0, 0, 150, false);
     }
 
-    @Test
+    
     public void testProxyFlippedIntermediateByte2() throws Exception {
         useProxy(0, 0, 150000, false);
     }
 
-    @Test
+    
     public void testProxyFlippedIntermediateByteChange() throws Exception {
         useProxy(0, 0, 150, true);
     }
 
-    @Test
+    
     public void testProxyFlippedIntermediateByteChange2() throws Exception {
         useProxy(0, 0, 150000, true);
     }

@@ -83,6 +83,7 @@
       <plugin>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
+          <argLine>-Xmx4G</argLine>
           <systemPropertyVariables>
             <standby.server.port>${standby.server.port}</standby.server.port>
             <standby.proxy.port>${standby.proxy.port}</standby.proxy.port>
