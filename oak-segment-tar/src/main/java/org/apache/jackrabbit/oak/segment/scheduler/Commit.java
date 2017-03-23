@@ -17,6 +17,7 @@
 
 package org.apache.jackrabbit.oak.segment.scheduler;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import javax.annotation.Nonnull;
@@ -25,6 +26,7 @@ import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.segment.SegmentNodeBuilder;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
+import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 /**
@@ -32,14 +34,15 @@ import org.apache.jackrabbit.oak.spi.state.NodeState;
  * a base node state result in a new node state.
  */
 public class Commit {
-    private final NodeState before;
+    private final SegmentNodeBuilder changes;
     private final CommitHook hook;
     private final CommitInfo info;
     
-    Commit(@Nonnull SegmentNodeBuilder builder,
+    public Commit(@Nonnull NodeBuilder changes,
             @Nonnull CommitHook hook, @Nonnull CommitInfo info) {
-        checkNotNull(builder);
-        this.before = builder.getBaseState();
+        checkNotNull(changes);
+        checkArgument(changes instanceof SegmentNodeBuilder);
+        this.changes = (SegmentNodeBuilder) changes;
 
         this.hook = checkNotNull(hook);
         this.info = checkNotNull(info);
@@ -58,4 +61,17 @@ public class Commit {
         return null;
     }
 
+    public SegmentNodeBuilder getChanges() {
+        return changes;
+    }
+
+    public CommitHook getHook() {
+        return hook;
+    }
+
+    public CommitInfo getInfo() {
+        return info;
+    }
+    
+    
 }

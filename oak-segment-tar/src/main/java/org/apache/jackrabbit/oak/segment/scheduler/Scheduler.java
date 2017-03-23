@@ -19,7 +19,14 @@ package org.apache.jackrabbit.oak.segment.scheduler;
 
 import java.util.Map;
 
+import javax.annotation.Nonnull;
+
 import org.apache.jackrabbit.oak.api.CommitFailedException;
+import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
+import org.apache.jackrabbit.oak.spi.commit.CommitHook;
+import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
+import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
+import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 /**
  * A {@code Scheduler} instance transforms changes to the content tree
@@ -45,7 +52,8 @@ public interface Scheduler<S extends SchedulerOptions> {
      * @throws CommitFailedException  if the commit failed and none of the changes
      *                                have been applied.
      */
-    void schedule(Commit commit, S schedulingOptions) throws CommitFailedException;
+    NodeState schedule(@Nonnull NodeBuilder builder, @Nonnull CommitHook commitHook,
+            @Nonnull CommitInfo info, SchedulerOptions schedulingOptions) throws CommitFailedException;
     
     /**
      * Creates a new checkpoint of the latest root of the tree. The checkpoint
@@ -62,7 +70,7 @@ public interface Scheduler<S extends SchedulerOptions> {
      * @param properties properties to associate with the checkpoint
      * @return string reference of this checkpoint
      */
-    String addCheckpoint(long duration, Map<String, String> properties);
+    String checkpoint(long lifetime, @Nonnull Map<String, String> properties);
     
     /**
      * Releases the provided checkpoint. If the provided checkpoint doesn't exist this method should return {@code true}.
@@ -71,5 +79,8 @@ public interface Scheduler<S extends SchedulerOptions> {
      * @return {@code true} if the checkpoint was successfully removed, or if it doesn't exist
      */
     boolean removeCheckpoint(String name);
-
+    
+    NodeState getHeadNodeState();
+    
+    ChangeDispatcher changeDispatcher();
 }
