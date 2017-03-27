@@ -25,8 +25,6 @@ import org.apache.jackrabbit.oak.segment.SegmentNodeStore.SegmentNodeStoreBuilde
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.ReadOnlyFileStore;
 import org.apache.jackrabbit.oak.segment.memory.MemoryStore;
-import org.apache.jackrabbit.oak.segment.scheduler.Scheduler;
-import org.apache.jackrabbit.oak.segment.scheduler.SchedulerOptions;
 
 /**
  * Static factories for creating {@link SegmentNodeBuilder} instances
@@ -40,9 +38,8 @@ public final class SegmentNodeStoreBuilders {
      */
     @Nonnull
     public static SegmentNodeStoreBuilder builder(@Nonnull FileStore store) {
-        Scheduler<SchedulerOptions> scheduler = LockBasedScheduler.builder(store.getRevisions(), store.getReader()).build();
         return SegmentNodeStore.builder(store.getRevisions(),
-                store.getReader(), store.getWriter(), store.getBlobStore(), scheduler);
+                store.getReader(), store.getWriter(), store.getBlobStore());
     }
 
     /**
@@ -50,9 +47,8 @@ public final class SegmentNodeStoreBuilders {
      */
     @Nonnull
     public static SegmentNodeStoreBuilder builder(@Nonnull MemoryStore store) {
-        Scheduler<SchedulerOptions> scheduler = LockBasedScheduler.builder(store.getRevisions(), store.getReader()).build();
         return SegmentNodeStore.builder(store.getRevisions(),
-                store.getReader(), store.getWriter(), store.getBlobStore(), scheduler);
+                store.getReader(), store.getWriter(), store.getBlobStore());
     }
 
     /**
@@ -60,8 +56,7 @@ public final class SegmentNodeStoreBuilders {
      */
     @Nonnull
     public static SegmentNodeStoreBuilder builder(@Nonnull ReadOnlyFileStore store) {
-        Scheduler<SchedulerOptions> scheduler = LockBasedScheduler.builder(store.getRevisions(), store.getReader()).build();
         return SegmentNodeStore.builder(store.getRevisions(),
-                store.getReader(), store.getWriter(), store.getBlobStore(), scheduler);
+                store.getReader(), store.getWriter(), store.getBlobStore());
     }
 }

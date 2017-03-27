@@ -106,7 +106,6 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
         return new LockBasedSchedulerBuilder(checkNotNull(revisions), checkNotNull(reader));
     }
 
-    
     private static final Logger log = LoggerFactory.getLogger(LockBasedScheduler.class);
 
     /**
@@ -153,18 +152,22 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
 
         this.reader = builder.reader;
         this.revisions = builder.revisions;
-
+        this.head = new AtomicReference<SegmentNodeState>(reader.readHeadState(revisions));
         if (builder.dispatchChanges) {
-            this.changeDispatcher = new ChangeDispatcher(getRoot());
+            this.changeDispatcher = new ChangeDispatcher(getHeadNodeState().getChildNode(ROOT));
         } else {
             this.changeDispatcher = null;
         }
         
         this.stats = new SegmentNodeStoreStats(builder.statsProvider);
         this.maximumBackoff = builder.maximumBackoff;
-        this.head = new AtomicReference<SegmentNodeState>(reader.readHeadState(revisions));
     }
 
+    @Override
+    public ChangeDispatcher changeDispatcher() {
+        return changeDispatcher;
+    }
+    
     @Override
     public NodeState getHeadNodeState() {
         if (commitSemaphore.tryAcquire()) {
@@ -177,10 +180,6 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
         return head.get();
     }
     
-    private NodeState getRoot() {
-        return getHeadNodeState().getChildNode(ROOT);
-    }
-
     @Override
     public NodeState schedule(NodeBuilder changes, CommitHook commitHook, CommitInfo info,
             SchedulerOptions schedulingOptions) throws CommitFailedException {
@@ -504,9 +503,5 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
      */
     void setCheckpointsLockWaitTime(int checkpointsLockWaitTime) {
         this.checkpointsLockWaitTime = checkpointsLockWaitTime;
-    }
-    
-    public ChangeDispatcher changeDispatcher() {
-        return changeDispatcher;
     }
 }

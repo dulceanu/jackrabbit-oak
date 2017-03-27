@@ -85,10 +85,9 @@ public class SegmentNodeStore implements NodeStore, Observable {
         @CheckForNull
         private final BlobStore blobStore;
         
-        @Nonnull
-        private final Scheduler<SchedulerOptions> scheduler;
-
         private boolean isCreated;
+        
+        private boolean dispatchChanges = true;
 
         @Nonnull
         private StatisticsProvider statsProvider = StatisticsProvider.NOOP;
@@ -97,15 +96,20 @@ public class SegmentNodeStore implements NodeStore, Observable {
                 @Nonnull Revisions revisions,
                 @Nonnull SegmentReader reader,
                 @Nonnull SegmentWriter writer,
-                @Nullable BlobStore blobStore,
-                @Nonnull Scheduler<SchedulerOptions> scheduler) {
+                @Nullable BlobStore blobStore) {
             this.revisions = revisions;
             this.reader = reader;
             this.writer = writer;
             this.blobStore = blobStore;
-            this.scheduler = scheduler;
         }
 
+        
+        @Nonnull
+        public SegmentNodeStoreBuilder dispatchChanges(boolean dispatchChanges) {
+            this.dispatchChanges = dispatchChanges;
+            return this;
+        }
+        
         /**
          * {@link StatisticsProvider} for collecting statistics related to SegmentStore
          * @param statisticsProvider
@@ -143,10 +147,9 @@ public class SegmentNodeStore implements NodeStore, Observable {
             @Nonnull Revisions revisions,
             @Nonnull SegmentReader reader,
             @Nonnull SegmentWriter writer,
-            @Nullable BlobStore blobStore,
-            @Nonnull Scheduler<SchedulerOptions> scheduler) {
+            @Nullable BlobStore blobStore) {
         return new SegmentNodeStoreBuilder(checkNotNull(revisions),
-                checkNotNull(reader), checkNotNull(writer), blobStore, checkNotNull(scheduler));
+                checkNotNull(reader), checkNotNull(writer), blobStore);
     }
 
     static final String ROOT = "root";
@@ -175,7 +178,11 @@ public class SegmentNodeStore implements NodeStore, Observable {
         this.reader = builder.reader;
         this.writer = builder.writer;
         this.blobStore = builder.blobStore;
-        this.scheduler = builder.scheduler;
+        
+        this.scheduler = LockBasedScheduler.builder(builder.revisions, builder.reader)
+                .dispatchChanges(builder.dispatchChanges)
+                .withStatisticsProvider(builder.statsProvider)
+                .build();
         
         this.stats = new SegmentNodeStoreStats(builder.statsProvider);
     }
