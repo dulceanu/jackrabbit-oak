@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.jackrabbit.oak.segment;
+package org.apache.jackrabbit.oak.segment.scheduler;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -38,11 +38,13 @@ import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.api.PropertyState;
-import org.apache.jackrabbit.oak.segment.scheduler.Commit;
-import org.apache.jackrabbit.oak.segment.scheduler.Scheduler;
-import org.apache.jackrabbit.oak.segment.scheduler.SchedulerOptions;
+import org.apache.jackrabbit.oak.segment.Revisions;
+import org.apache.jackrabbit.oak.segment.SegmentNodeBuilder;
+import org.apache.jackrabbit.oak.segment.SegmentNodeState;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStoreStats;
+import org.apache.jackrabbit.oak.segment.SegmentOverflowException;
+import org.apache.jackrabbit.oak.segment.SegmentReader;
 import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
-import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
@@ -204,14 +206,8 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
     }
     
     @Override
-    public NodeState schedule(NodeBuilder changes, CommitHook commitHook, CommitInfo info,
+    public NodeState schedule(Commit commit,
             SchedulerOptions schedulingOptions) throws CommitFailedException {
-        checkArgument(changes instanceof SegmentNodeBuilder);
-        SegmentNodeBuilder snb = (SegmentNodeBuilder) changes;
-        checkArgument(snb.isRootBuilder());
-        checkNotNull(commitHook);
-
-        Commit commit = new Commit(changes, commitHook, info);
         boolean queued = false;
 
         try {
@@ -234,7 +230,7 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
                 long beforeCommitTime = System.nanoTime();
 
                 NodeState merged = execute(commit);
-                snb.reset(merged);
+                commit.changes().reset(merged);
 
                 long afterCommitTime = System.nanoTime();
                 stats.committedAfter(afterCommitTime - beforeCommitTime);

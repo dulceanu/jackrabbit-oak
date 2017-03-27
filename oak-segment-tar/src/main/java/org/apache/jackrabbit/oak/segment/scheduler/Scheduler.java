@@ -23,9 +23,6 @@ import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
-import org.apache.jackrabbit.oak.spi.commit.CommitHook;
-import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
-import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 /**
@@ -52,8 +49,7 @@ public interface Scheduler<S extends SchedulerOptions> {
      * @throws CommitFailedException  if the commit failed and none of the changes
      *                                have been applied.
      */
-    NodeState schedule(@Nonnull NodeBuilder builder, @Nonnull CommitHook commitHook,
-            @Nonnull CommitInfo info, SchedulerOptions schedulingOptions) throws CommitFailedException;
+    NodeState schedule(@Nonnull Commit commit, SchedulerOptions schedulingOptions) throws CommitFailedException;
     
     /**
      * Creates a new checkpoint of the latest root of the tree. The checkpoint

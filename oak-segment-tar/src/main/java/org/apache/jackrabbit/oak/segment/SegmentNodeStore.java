@@ -38,6 +38,8 @@ import org.apache.jackrabbit.oak.api.Blob;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
+import org.apache.jackrabbit.oak.segment.scheduler.Commit;
+import org.apache.jackrabbit.oak.segment.scheduler.LockBasedScheduler;
 import org.apache.jackrabbit.oak.segment.scheduler.Scheduler;
 import org.apache.jackrabbit.oak.segment.scheduler.SchedulerOptions;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
@@ -163,9 +165,6 @@ public class SegmentNodeStore implements NodeStore, Observable {
     private final SegmentWriter writer;
 
     @Nonnull
-    private final Revisions revisions;
-    
-    @Nonnull
     private final Scheduler<SchedulerOptions> scheduler;
 
     @CheckForNull
@@ -174,7 +173,6 @@ public class SegmentNodeStore implements NodeStore, Observable {
     private final SegmentNodeStoreStats stats;
 
     private SegmentNodeStore(SegmentNodeStoreBuilder builder) {
-        this.revisions = builder.revisions;
         this.reader = builder.reader;
         this.writer = builder.writer;
         this.blobStore = builder.blobStore;
@@ -205,7 +203,7 @@ public class SegmentNodeStore implements NodeStore, Observable {
     public NodeState merge(
             @Nonnull NodeBuilder builder, @Nonnull CommitHook commitHook,
             @Nonnull CommitInfo info) throws CommitFailedException {
-        return scheduler.schedule(builder, commitHook, info, null);
+        return scheduler.schedule(new Commit(builder, commitHook, info), null);
     }
 
     @Override @Nonnull
