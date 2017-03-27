@@ -38,12 +38,12 @@ import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.api.PropertyState;
+import org.apache.jackrabbit.oak.segment.scheduler.Commit;
 import org.apache.jackrabbit.oak.segment.scheduler.Scheduler;
 import org.apache.jackrabbit.oak.segment.scheduler.SchedulerOptions;
 import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
-import org.apache.jackrabbit.oak.spi.state.ConflictAnnotatingRebaseDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.stats.StatisticsProvider;
@@ -180,6 +180,29 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
         return head.get();
     }
     
+    /**
+     * Refreshes the head state. Should only be called while holding a permit
+     * from the {@link #commitSemaphore}.
+     * 
+     * @param dispatchChanges
+     *            if set to true the changes would also be dispatched
+     */
+    private void refreshHead(boolean dispatchChanges) {
+        SegmentNodeState state = reader.readHeadState(revisions);
+        if (!state.getRecordId().equals(head.get().getRecordId())) {
+            head.set(state);
+            if (dispatchChanges) {
+                contentChanged(state.getChildNode(ROOT), CommitInfo.EMPTY_EXTERNAL);
+            }
+        }
+    }
+
+    private void contentChanged(NodeState root, CommitInfo info) {
+        if (changeDispatcher != null) {
+            changeDispatcher.contentChanged(root, info);
+        }
+    }
+    
     @Override
     public NodeState schedule(NodeBuilder changes, CommitHook commitHook, CommitInfo info,
             SchedulerOptions schedulingOptions) throws CommitFailedException {
@@ -188,6 +211,7 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
         checkArgument(snb.isRootBuilder());
         checkNotNull(commitHook);
 
+        Commit commit = new Commit(changes, commitHook, info);
         boolean queued = false;
 
         try {
@@ -209,7 +233,7 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
 
                 long beforeCommitTime = System.nanoTime();
 
-                NodeState merged = execute(snb, commitHook, info);
+                NodeState merged = execute(commit);
                 snb.reset(merged);
 
                 long afterCommitTime = System.nanoTime();
@@ -228,19 +252,19 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
         }
     }
 
-    private NodeState execute(SegmentNodeBuilder changes, CommitHook hook, CommitInfo info)
+    private NodeState execute(Commit commit)
             throws CommitFailedException, InterruptedException {
         // only do the merge if there are some changes to commit
-        if (!SegmentNodeState.fastEquals(changes.getBaseState(), changes.getNodeState())) {
-            long timeout = optimisticMerge(changes, hook, info);
+        if (!SegmentNodeState.fastEquals(commit.changes().getBaseState(), commit.changes().getNodeState())) {
+            long timeout = optimisticMerge(commit);
             if (timeout >= 0) {
-                pessimisticMerge(changes, hook, info, timeout);
+                pessimisticMerge(commit, timeout);
             }
         }
         return head.get().getChildNode(ROOT);
     }
     
-    private long optimisticMerge(SegmentNodeBuilder changes, CommitHook hook, CommitInfo info)
+    private long optimisticMerge(Commit commit)
             throws CommitFailedException, InterruptedException {
         long timeout = 1;
 
@@ -255,9 +279,8 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
                 // someone else has a pessimistic lock on the journal,
                 // so we should not try to commit anything yet
             } else {
-                SegmentNodeBuilder builder = prepare(state, changes, hook, info);
                 // use optimistic locking to update the journal
-                if (setHead(state, builder.getNodeState(), info)) {
+                if (setHead(state, commit.apply(state), commit.info())) {
                     return -1;
                 }
             }
@@ -274,7 +297,7 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
         return MILLISECONDS.convert(timeout, NANOSECONDS);
     }
 
-    private void pessimisticMerge(SegmentNodeBuilder changes, CommitHook hook, CommitInfo info, long timeout)
+    private void pessimisticMerge(Commit commit, long timeout)
             throws CommitFailedException, InterruptedException {
         while (true) {
             long now = currentTimeMillis();
@@ -291,42 +314,19 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
                 builder.setProperty("token", UUID.randomUUID().toString());
                 builder.setProperty("timeout", now + timeout);
 
-                if (setHead(state, builder.getNodeState(), info)) {
+                if (setHead(state, builder.getNodeState(), commit.info())) {
                      // lock acquired; rebase, apply commit hooks, and unlock
-                    builder = prepare(state, changes, hook, info);
+                    builder = commit.apply(state).builder();
                     builder.removeProperty("token");
                     builder.removeProperty("timeout");
 
                     // complete the commit
-                    if (setHead(state, builder.getNodeState(), info)) {
+                    if (setHead(state, builder.getNodeState(), commit.info())) {
                         return;
                     }
                 }
             }
         }
-    }
-    
-    private SegmentNodeBuilder prepare(SegmentNodeState state, SegmentNodeBuilder changes, CommitHook hook, CommitInfo info) throws CommitFailedException {
-        SegmentNodeBuilder builder = state.builder();
-        if (SegmentNodeState.fastEquals(changes.getBaseState(), state.getChildNode(ROOT))) {
-            // use a shortcut when there are no external changes
-            NodeState before = changes.getBaseState();
-            NodeState after = changes.getNodeState();
-            
-            builder.setChildNode(
-                    ROOT, hook.processCommit(before, after, info));
-        } else {
-            // there were some external changes, so do the full rebase
-            ConflictAnnotatingRebaseDiff diff =
-                    new ConflictAnnotatingRebaseDiff(builder.child(ROOT));
-            changes.getNodeState().compareAgainstBaseState(changes.getBaseState(), diff);
-            // apply commit hooks on the rebased changes         
-            builder.setChildNode(ROOT, hook.processCommit(
-                    builder.getBaseState().getChildNode(ROOT),
-                    builder.getNodeState().getChildNode(ROOT),
-                    info));
-        }
-        return builder;
     }
     
     private boolean setHead(SegmentNodeState before, SegmentNodeState after, CommitInfo info) {
@@ -420,29 +420,6 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
         return false;
     }
 
-    /**
-     * Refreshes the head state. Should only be called while holding a permit
-     * from the {@link #commitSemaphore}.
-     * 
-     * @param dispatchChanges
-     *            if set to true the changes would also be dispatched
-     */
-    private void refreshHead(boolean dispatchChanges) {
-        SegmentNodeState state = reader.readHeadState(revisions);
-        if (!state.getRecordId().equals(head.get().getRecordId())) {
-            head.set(state);
-            if (dispatchChanges) {
-                contentChanged(state.getChildNode(ROOT), CommitInfo.EMPTY_EXTERNAL);
-            }
-        }
-    }
-
-    private void contentChanged(NodeState root, CommitInfo info) {
-        if (changeDispatcher != null) {
-            changeDispatcher.contentChanged(root, info);
-        }
-    }
-
     private final class CPCreator implements Callable<Boolean> {
 
         private final String name;
@@ -495,13 +472,5 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
                 return false;
             }
         }
-    }
-    
-    /**
-     * Sets the number of seconds to wait for the attempt to grab the lock to
-     * create a checkpoint
-     */
-    void setCheckpointsLockWaitTime(int checkpointsLockWaitTime) {
-        this.checkpointsLockWaitTime = checkpointsLockWaitTime;
     }
 }

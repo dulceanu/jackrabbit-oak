@@ -24,8 +24,10 @@ import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.CommitFailedException;
 import org.apache.jackrabbit.oak.segment.SegmentNodeBuilder;
+import org.apache.jackrabbit.oak.segment.SegmentNodeState;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
+import org.apache.jackrabbit.oak.spi.state.ConflictAnnotatingRebaseDiff;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
@@ -34,6 +36,8 @@ import org.apache.jackrabbit.oak.spi.state.NodeState;
  * a base node state result in a new node state.
  */
 public class Commit {
+    static final String ROOT = "root";
+    
     private final SegmentNodeBuilder changes;
     private final CommitHook hook;
     private final CommitInfo info;
@@ -57,21 +61,38 @@ public class Commit {
      * @throws CommitFailedException  if the commit cannot be applied to {@code base}.
      *                                (e.g. because of a conflict.)
      */
-    public NodeState apply(NodeState base) throws CommitFailedException {
-        return null;
+    public SegmentNodeState apply(SegmentNodeState base) throws CommitFailedException {
+        SegmentNodeBuilder builder = base.builder();
+        if (SegmentNodeState.fastEquals(changes.getBaseState(), base.getChildNode(ROOT))) {
+            // use a shortcut when there are no external changes
+            NodeState before = changes.getBaseState();
+            NodeState after = changes.getNodeState();
+            
+            builder.setChildNode(
+                    ROOT, hook.processCommit(before, after, info));
+        } else {
+            // there were some external changes, so do the full rebase
+            ConflictAnnotatingRebaseDiff diff =
+                    new ConflictAnnotatingRebaseDiff(builder.child(ROOT));
+            changes.getNodeState().compareAgainstBaseState(changes.getBaseState(), diff);
+            // apply commit hooks on the rebased changes         
+            builder.setChildNode(ROOT, hook.processCommit(
+                    builder.getBaseState().getChildNode(ROOT),
+                    builder.getNodeState().getChildNode(ROOT),
+                    info));
+        }
+        return builder.getNodeState();
     }
 
-    public SegmentNodeBuilder getChanges() {
+    public SegmentNodeBuilder changes() {
         return changes;
     }
 
-    public CommitHook getHook() {
+    public CommitHook hook() {
         return hook;
     }
 
-    public CommitInfo getInfo() {
+    public CommitInfo info() {
         return info;
     }
-    
-    
 }
