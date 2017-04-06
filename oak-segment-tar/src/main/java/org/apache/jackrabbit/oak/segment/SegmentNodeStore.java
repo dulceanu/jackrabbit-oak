@@ -41,7 +41,6 @@ import org.apache.jackrabbit.oak.plugins.blob.BlobStoreBlob;
 import org.apache.jackrabbit.oak.segment.scheduler.Commit;
 import org.apache.jackrabbit.oak.segment.scheduler.LockBasedScheduler;
 import org.apache.jackrabbit.oak.segment.scheduler.Scheduler;
-import org.apache.jackrabbit.oak.segment.scheduler.SchedulerOptions;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.commit.CommitHook;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
@@ -62,15 +61,6 @@ import org.slf4j.LoggerFactory;
  * and checkpoints are stored under "/checkpoints".
  */
 public class SegmentNodeStore implements NodeStore, Observable {
-
-    private static final Closeable NOOP = new Closeable() {
-
-        @Override
-        public void close() {
-            // This method was intentionally left blank.
-        }
-
-    };
 
     public static class SegmentNodeStoreBuilder {
         private static final Logger LOG = LoggerFactory.getLogger(SegmentNodeStoreBuilder.class);
@@ -165,7 +155,7 @@ public class SegmentNodeStore implements NodeStore, Observable {
     private final SegmentWriter writer;
 
     @Nonnull
-    private final Scheduler<SchedulerOptions> scheduler;
+    private final Scheduler scheduler;
 
     @CheckForNull
     private final BlobStore blobStore;
@@ -187,10 +177,7 @@ public class SegmentNodeStore implements NodeStore, Observable {
 
     @Override
     public Closeable addObserver(Observer observer) {
-        if (scheduler.changeDispatcher() != null) {
-            return scheduler.changeDispatcher().addObserver(observer);
-        }
-        return NOOP;
+        return scheduler.addObserver(observer);
     }
 
     @Override @Nonnull
@@ -203,7 +190,7 @@ public class SegmentNodeStore implements NodeStore, Observable {
     public NodeState merge(
             @Nonnull NodeBuilder builder, @Nonnull CommitHook commitHook,
             @Nonnull CommitInfo info) throws CommitFailedException {
-        return scheduler.schedule(new Commit(builder, commitHook, info), null);
+        return scheduler.schedule(new Commit(builder, commitHook, info));
     }
 
     @Override @Nonnull

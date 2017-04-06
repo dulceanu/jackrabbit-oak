@@ -32,18 +32,17 @@ import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 /**
- * A {@code Commit} instance represents a set of related changes, which when applied to
- * a base node state result in a new node state.
+ * A {@code Commit} instance represents a set of related changes, which when
+ * applied to a base node state result in a new node state.
  */
 public class Commit {
     static final String ROOT = "root";
-    
+
     private final SegmentNodeBuilder changes;
     private final CommitHook hook;
     private final CommitInfo info;
-    
-    public Commit(@Nonnull NodeBuilder changes,
-            @Nonnull CommitHook hook, @Nonnull CommitInfo info) {
+
+    public Commit(@Nonnull NodeBuilder changes, @Nonnull CommitHook hook, @Nonnull CommitInfo info) {
         checkNotNull(changes);
         checkArgument(changes instanceof SegmentNodeBuilder);
         this.changes = (SegmentNodeBuilder) changes;
@@ -56,10 +55,12 @@ public class Commit {
      * Apply the changes represented by this commit to the passed {@code base}
      * node state.
      *
-     * @param base   the base node state to apply this commit to
-     * @return       the resulting state from applying this commit to {@code base}.
-     * @throws CommitFailedException  if the commit cannot be applied to {@code base}.
-     *                                (e.g. because of a conflict.)
+     * @param base
+     *            the base node state to apply this commit to
+     * @return the resulting state from applying this commit to {@code base}.
+     * @throws CommitFailedException
+     *             if the commit cannot be applied to {@code base}. (e.g.
+     *             because of a conflict.)
      */
     public SegmentNodeState apply(SegmentNodeState base) throws CommitFailedException {
         SegmentNodeBuilder builder = base.builder();
@@ -67,32 +68,41 @@ public class Commit {
             // use a shortcut when there are no external changes
             NodeState before = changes.getBaseState();
             NodeState after = changes.getNodeState();
-            
-            builder.setChildNode(
-                    ROOT, hook.processCommit(before, after, info));
+
+            builder.setChildNode(ROOT, hook.processCommit(before, after, info));
         } else {
             // there were some external changes, so do the full rebase
-            ConflictAnnotatingRebaseDiff diff =
-                    new ConflictAnnotatingRebaseDiff(builder.child(ROOT));
+            ConflictAnnotatingRebaseDiff diff = new ConflictAnnotatingRebaseDiff(builder.child(ROOT));
             changes.getNodeState().compareAgainstBaseState(changes.getBaseState(), diff);
-            // apply commit hooks on the rebased changes         
-            builder.setChildNode(ROOT, hook.processCommit(
-                    builder.getBaseState().getChildNode(ROOT),
-                    builder.getNodeState().getChildNode(ROOT),
-                    info));
+            // apply commit hooks on the rebased changes
+            builder.setChildNode(ROOT, hook.processCommit(builder.getBaseState().getChildNode(ROOT),
+                    builder.getNodeState().getChildNode(ROOT), info));
         }
         return builder.getNodeState();
     }
 
-    public SegmentNodeBuilder changes() {
-        return changes;
+    /**
+     * Does housekeeping work needed after applying the commit.
+     * @param merged
+     *            the current head node state, after applying the changes in the commit.
+     */
+    public void applied(SegmentNodeState merged) {
+        changes.reset(merged);
     }
 
-    public CommitHook hook() {
-        return hook;
+    /**
+     * Checks if the commit contains any changes.
+     * 
+     * @return {@code true}, if the commit has changes, {@code false},
+     *         otherwise.
+     */
+    public boolean hasChanges() {
+        return !SegmentNodeState.fastEquals(changes.getBaseState(), changes.getNodeState());
     }
 
     public CommitInfo info() {
         return info;
     }
+
+    // add equals() and hashCode()
 }

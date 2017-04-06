@@ -17,26 +17,35 @@
 
 package org.apache.jackrabbit.oak.segment.scheduler;
 
+import java.io.Closeable;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
 
 import org.apache.jackrabbit.oak.api.CommitFailedException;
-import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
+import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 
 /**
  * A {@code Scheduler} instance transforms changes to the content tree
- * into a {@link ScheduledCommits backlog} of {@link Commit commits}.
+ * into a queue of {@link Commit commits}.
  * <p>
  * An implementation is free to employ any scheduling strategy as long
  * as it guarantees all changes are applied atomically without changing
  * the semantics of the changes recorded in the {@code NodeBuilder} or
  * the semantics of the {@code CommitHook} contained in the actual {@code Commit} 
- * passed to the {@link #schedule(Commit, SchedulerOptions) schedule}
+ * passed to the {@link #schedule(Commit, SchedulerOption) schedule}
  * method.
  */
-public interface Scheduler<S extends SchedulerOptions> {
+public interface Scheduler {
+    
+    /**
+     * Scheduling options for parameterizing individual
+     * {@link Scheduler#schedule(Commit, SchedulerOptions) commits}.
+     * (E.g. expedite, prioritize, defer, collapse, coalesce, parallelize, etc).
+     *
+     */
+    interface SchedulerOption {}
 
     /**
      * Schedule a {@code commit}. This method blocks until the changes in this
@@ -49,7 +58,7 @@ public interface Scheduler<S extends SchedulerOptions> {
      * @throws CommitFailedException  if the commit failed and none of the changes
      *                                have been applied.
      */
-    NodeState schedule(@Nonnull Commit commit, SchedulerOptions schedulingOptions) throws CommitFailedException;
+    NodeState schedule(@Nonnull Commit commit, SchedulerOption... schedulingOptions) throws CommitFailedException;
     
     /**
      * Creates a new checkpoint of the latest root of the tree. The checkpoint
@@ -76,7 +85,18 @@ public interface Scheduler<S extends SchedulerOptions> {
      */
     boolean removeCheckpoint(String name);
     
+    /**
+     * Returns the latest state of the tree.
+     * @return the latest state.
+     */
     NodeState getHeadNodeState();
     
-    ChangeDispatcher changeDispatcher();
+    /**
+     * Register a new {@code Observer}. Clients need to call {@link Closeable#close()} 
+     * to stop getting notifications on the registered observer and to free up any resources
+     * associated with the registration.
+     * 
+     * @return a {@code Closeable} instance.
+     */
+    Closeable addObserver(Observer observer); 
 }

@@ -25,6 +25,7 @@ import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.jackrabbit.oak.api.Type.LONG;
 
+import java.io.Closeable;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
@@ -46,14 +47,23 @@ import org.apache.jackrabbit.oak.segment.SegmentOverflowException;
 import org.apache.jackrabbit.oak.segment.SegmentReader;
 import org.apache.jackrabbit.oak.spi.commit.ChangeDispatcher;
 import org.apache.jackrabbit.oak.spi.commit.CommitInfo;
+import org.apache.jackrabbit.oak.spi.commit.Observer;
 import org.apache.jackrabbit.oak.spi.state.NodeBuilder;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.stats.StatisticsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
-    
+public class LockBasedScheduler implements Scheduler {
+    private static final Closeable NOOP = new Closeable() {
+
+        @Override
+        public void close() {
+            // This method was intentionally left blank.
+        }
+
+    };
+
     public static class LockBasedSchedulerBuilder {
         @Nonnull
         private final SegmentReader reader;
@@ -166,8 +176,11 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
     }
 
     @Override
-    public ChangeDispatcher changeDispatcher() {
-        return changeDispatcher;
+    public Closeable addObserver(Observer observer) {
+        if (changeDispatcher != null) {
+            return changeDispatcher.addObserver(observer);
+        }
+        return NOOP;
     }
     
     @Override
@@ -206,8 +219,7 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
     }
     
     @Override
-    public NodeState schedule(Commit commit,
-            SchedulerOptions schedulingOptions) throws CommitFailedException {
+    public NodeState schedule(@Nonnull Commit commit, SchedulerOption... schedulingOptions) throws CommitFailedException {
         boolean queued = false;
 
         try {
@@ -229,8 +241,8 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
 
                 long beforeCommitTime = System.nanoTime();
 
-                NodeState merged = execute(commit);
-                commit.changes().reset(merged);
+                SegmentNodeState merged = (SegmentNodeState) execute(commit);
+                commit.applied(merged);
 
                 long afterCommitTime = System.nanoTime();
                 stats.committedAfter(afterCommitTime - beforeCommitTime);
@@ -251,7 +263,7 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
     private NodeState execute(Commit commit)
             throws CommitFailedException, InterruptedException {
         // only do the merge if there are some changes to commit
-        if (!SegmentNodeState.fastEquals(commit.changes().getBaseState(), commit.changes().getNodeState())) {
+        if (commit.hasChanges()) {
             long timeout = optimisticMerge(commit);
             if (timeout >= 0) {
                 pessimisticMerge(commit, timeout);
@@ -371,7 +383,7 @@ public class LockBasedScheduler implements Scheduler<SchedulerOptions> {
      *         result of {@code c.call()} otherwise.
      * @throws Exception
      */
-    boolean locked(Callable<Boolean> c, long timeout, TimeUnit unit) throws Exception {
+    private boolean locked(Callable<Boolean> c, long timeout, TimeUnit unit) throws Exception {
         if (commitSemaphore.tryAcquire(timeout, unit)) {
             try {
                 return c.call();
