@@ -97,7 +97,8 @@ public class Commit {
      *         otherwise.
      */
     public boolean hasChanges() {
-        return !changes.getBaseState().equals(changes.getNodeState());
+        return !SegmentNodeState.fastEquals(changes.getBaseState(), changes.getNodeState());
+//        return !changes.getBaseState().equals(changes.getNodeState());
     }
 
     public CommitInfo info() {
