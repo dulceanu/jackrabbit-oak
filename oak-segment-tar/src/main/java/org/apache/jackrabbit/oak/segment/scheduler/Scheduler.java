@@ -40,8 +40,7 @@ import org.apache.jackrabbit.oak.spi.state.NodeState;
 public interface Scheduler {
     
     /**
-     * Scheduling options for parameterizing individual
-     * {@link Scheduler#schedule(Commit, SchedulerOptions) commits}.
+     * Scheduling options for parameterizing individual commits.
      * (E.g. expedite, prioritize, defer, collapse, coalesce, parallelize, etc).
      *
      */
@@ -50,7 +49,7 @@ public interface Scheduler {
     /**
      * Schedule a {@code commit}. This method blocks until the changes in this
      * {@code commit} have been processed and persisted. That is, until a call
-     * to {@code SegmentStore.getHead} would return a node state reflecting those
+     * to {@link Scheduler#getHeadNodeState()} would return a node state reflecting those
      * changes.
      *
      * @param commit    the commit

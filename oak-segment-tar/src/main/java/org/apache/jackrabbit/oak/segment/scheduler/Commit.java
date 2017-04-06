@@ -64,7 +64,7 @@ public class Commit {
      */
     public SegmentNodeState apply(SegmentNodeState base) throws CommitFailedException {
         SegmentNodeBuilder builder = base.builder();
-        if (SegmentNodeState.fastEquals(changes.getBaseState(), base.getChildNode(ROOT))) {
+        if (changes.getBaseState().equals(base.getChildNode(ROOT))) {
             // use a shortcut when there are no external changes
             NodeState before = changes.getBaseState();
             NodeState after = changes.getNodeState();
@@ -97,33 +97,10 @@ public class Commit {
      *         otherwise.
      */
     public boolean hasChanges() {
-        return !SegmentNodeState.fastEquals(changes.getBaseState(), changes.getNodeState());
+        return !changes.getBaseState().equals(changes.getNodeState());
     }
 
     public CommitInfo info() {
         return info;
-    }
-
-    @Override
-    public boolean equals(Object object) {
-        if (this == object) {
-            return true;
-        } else if (object instanceof Commit) {
-            Commit that = (Commit) object;
-            return changes.getBaseState().equals(that.changes.getBaseState()) && 
-                   changes.getNodeState().equals(that.changes.getNodeState()) &&
-                   info.equals(that.info);
-        } else {
-            return false;
-        }
-    }
-    
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((changes == null) ? 0 : changes.hashCode());
-        result = prime * result + ((info == null) ? 0 : info.hashCode());
-        return result;
     }
 }

@@ -79,7 +79,7 @@ public class SegmentNodeBuilder extends MemoryNodeBuilder {
     /**
      * @return  {@code true} iff this builder has been acquired from a root node state.
      */
-    public boolean isRootBuilder() {
+    boolean isRootBuilder() {
         return isRoot();
     }
 
