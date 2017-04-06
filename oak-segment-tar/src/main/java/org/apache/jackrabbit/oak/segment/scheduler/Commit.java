@@ -64,7 +64,7 @@ public class Commit {
      */
     public SegmentNodeState apply(SegmentNodeState base) throws CommitFailedException {
         SegmentNodeBuilder builder = base.builder();
-        if (changes.getBaseState().equals(base.getChildNode(ROOT))) {
+        if (SegmentNodeState.fastEquals(changes.getBaseState(), base.getChildNode(ROOT))) {
             // use a shortcut when there are no external changes
             NodeState before = changes.getBaseState();
             NodeState after = changes.getNodeState();
@@ -98,7 +98,6 @@ public class Commit {
      */
     public boolean hasChanges() {
         return !SegmentNodeState.fastEquals(changes.getBaseState(), changes.getNodeState());
-//        return !changes.getBaseState().equals(changes.getNodeState());
     }
 
     public CommitInfo info() {
