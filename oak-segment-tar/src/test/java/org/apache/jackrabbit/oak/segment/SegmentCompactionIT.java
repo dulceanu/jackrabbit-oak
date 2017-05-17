@@ -132,7 +132,7 @@ public class SegmentCompactionIT {
     private final MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
 
     private final Random rnd = new Random();
-    private final ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(50);
+    private final ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(101);
     private final ListeningScheduledExecutorService scheduler = listeningDecorator(executor);
     private final FileStoreGCMonitor fileStoreGCMonitor = new FileStoreGCMonitor(Clock.SIMPLE);
     private final TestGCMonitor gcMonitor = new TestGCMonitor(fileStoreGCMonitor);
@@ -147,8 +147,8 @@ public class SegmentCompactionIT {
 
     private volatile ListenableFuture<?> compactor = immediateCancelledFuture();
     private volatile ReadWriteLock compactionLock = null;
-    private volatile int maxReaders = Integer.getInteger("SegmentCompactionIT.maxReaders", 10);
-    private volatile int maxWriters = Integer.getInteger("SegmentCompactionIT.maxWriters", 10);
+    private volatile int maxReaders = Integer.getInteger("SegmentCompactionIT.maxReaders", 25);
+    private volatile int maxWriters = Integer.getInteger("SegmentCompactionIT.maxWriters", 25);
     private volatile long maxStoreSize = 200000000000L;
     private volatile int maxBlobSize = 1000000;
     private volatile int maxStringSize = 100;
@@ -156,15 +156,18 @@ public class SegmentCompactionIT {
     private volatile int maxWriteOps = 10000;
     private volatile int maxNodeCount = 1000;
     private volatile int maxPropertyCount = 1000;
-    private volatile int nodeRemoveRatio = 10;
-    private volatile int propertyRemoveRatio = 10;
-    private volatile int nodeAddRatio = 40;
-    private volatile int addStringRatio = 20;
-    private volatile int addBinaryRatio = 0;
-    private volatile int compactionInterval = 2;
+    private volatile int nodeRemoveRatio = 0;
+    private volatile int propertyRemoveRatio = 0;
+    private volatile int nodeAddRatio = 10;
+    private volatile int addStringRatio = 80;
+    private volatile int addBinaryRatio = 10;
+    private volatile int compactionInterval = 4;
     private volatile boolean stopping;
     private volatile Reference rootReference;
     private volatile long fileStoreSize;
+    
+    private volatile long quietPeriodInMillis = 2 * 60 * 1000;
+    private volatile long runningPeriodInMillis = 5 * 60 * 1000;
 
     @Rule
     public TemporaryFolder folder = new TemporaryFolder(new File("target"));
@@ -306,12 +309,22 @@ public class SegmentCompactionIT {
     public void run() throws InterruptedException {
         scheduleSizeMonitor();
         scheduleCompactor();
-        addReaders(maxReaders);
-        addWriters(maxWriters);
-
+        
         synchronized (this) {
             while (!stopping) {
-                wait();
+                addReaders(maxReaders);
+                addWriters(maxWriters);
+                System.out.println("<<<< Finished addding writers and readers! Started test! >>>>>");
+                
+                Thread.sleep(runningPeriodInMillis);
+                System.out.println("<<<< Finished one run! Entering quiet period! >>>>>");
+                
+                removeWriters(maxWriters);
+                removeReaders(maxReaders);
+                
+                Thread.sleep(quietPeriodInMillis);
+                
+                //wait();
             }
         }
     }
@@ -346,7 +359,7 @@ public class SegmentCompactionIT {
         if (writers.size() < maxWriters) {
             final RandomWriter writer = new RandomWriter(rnd, nodeStore, rnd.nextInt(maxWriteOps), "W" + rnd.nextInt(5));
             final ListenableScheduledFuture<Void> futureWriter = scheduler.schedule(
-                    writer, rnd.nextInt(30), SECONDS);
+                    writer, rnd.nextInt(5), SECONDS);
             writers.add(futureWriter);
             addCallback(futureWriter, new FutureCallback<Void>() {
                 @Override
