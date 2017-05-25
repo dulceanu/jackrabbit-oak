@@ -149,7 +149,7 @@ public class SegmentCompactionIT {
     private volatile ReadWriteLock compactionLock = null;
     private volatile int maxReaders = Integer.getInteger("SegmentCompactionIT.maxReaders", 25);
     private volatile int maxWriters = Integer.getInteger("SegmentCompactionIT.maxWriters", 25);
-    private volatile long maxStoreSize = 200000000000L;
+    private volatile long maxStoreSize = 250_000_000_000L;
     private volatile int maxBlobSize = 1000000;
     private volatile int maxStringSize = 100;
     private volatile int maxReferences = 0;
@@ -158,10 +158,10 @@ public class SegmentCompactionIT {
     private volatile int maxPropertyCount = 1000;
     private volatile int nodeRemoveRatio = 0;
     private volatile int propertyRemoveRatio = 0;
-    private volatile int nodeAddRatio = 10;
-    private volatile int addStringRatio = 80;
+    private volatile int nodeAddRatio = 50;
+    private volatile int addStringRatio = 40;
     private volatile int addBinaryRatio = 10;
-    private volatile int compactionInterval = 4;
+    private volatile int compactionInterval = 100;
     private volatile boolean stopping;
     private volatile Reference rootReference;
     private volatile long fileStoreSize;
@@ -314,10 +314,10 @@ public class SegmentCompactionIT {
             while (!stopping) {
                 addReaders(maxReaders);
                 addWriters(maxWriters);
-                System.out.println("<<<< Finished addding writers and readers! Started test! >>>>>");
+                LOG.info("<<<< Finished addding writers and readers! Started test! >>>>>");
                 
                 Thread.sleep(runningPeriodInMillis);
-                System.out.println("<<<< Finished one run! Entering quiet period! >>>>>");
+                LOG.info("<<<< Finished one run! Entering quiet period! >>>>>");
                 
                 removeWriters(maxWriters);
                 removeReaders(maxReaders);
