@@ -21,13 +21,13 @@
     <parent>
         <artifactId>oak-parent</artifactId>
         <groupId>org.apache.jackrabbit</groupId>
-        <version>oak-1-april</version>
+        <version>1.8-SNAPSHOT</version>
         <relativePath>../oak-parent/pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>oak-blob-cloud-azure</artifactId>
-    <name>Oak Azure Cloud Blob Store</name>
+    <artifactId>oak-blob-cloud</artifactId>
+    <name>Oak Cloud Blob Store</name>
     <packaging>bundle</packaging>
 
     <build>
@@ -41,14 +41,8 @@
                 <artifactId>maven-bundle-plugin</artifactId>
                 <configuration>
                     <instructions>
-                        <Export-Package>
-                            org.apache.jackrabbit.oak.blob.cloud.azure.blobstorage
-                        </Export-Package>
+                        <Export-Package>org.apache.jackrabbit.oak.blob.cloud.aws.s3,org.apache.jackrabbit.oak.blob.cloud.s3.stats</Export-Package>
                         <DynamicImport-Package>sun.io</DynamicImport-Package>
-                        <Embed-Dependency>
-                            azure-storage,
-                            azure-keyvault-core
-                        </Embed-Dependency>
                     </instructions>
                 </configuration>
             </plugin>
@@ -115,17 +109,20 @@
             <artifactId>oak-core</artifactId>
             <version>${project.version}</version>
         </dependency>
-
-        <!-- Azure Blob Storage dependency -->
+        <!-- Amazon AWS dependency -->
         <dependency>
-            <groupId>com.microsoft.azure</groupId>
-            <artifactId>azure-storage</artifactId>
-            <version>5.0.0</version>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-s3</artifactId>
+            <version>1.11.24</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.microsoft.azure</groupId>
-            <artifactId>azure-keyvault-core</artifactId>
-            <version>0.9.7</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
 
         <!-- Test dependencies -->
