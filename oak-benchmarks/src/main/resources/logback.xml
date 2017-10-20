@@ -46,6 +46,8 @@
 
   <!-- Display information messages from oak-run check (oak-segment-tar) -->
   <logger name="org.apache.jackrabbit.oak.segment.file.tooling.ConsistencyChecker" level="DEBUG"/>
+  
+  <logger name="org.apache.jackrabbit.oak.segment.standby" level="DEBUG" />
 
   <root level="warn">
     <appender-ref ref="STDERR" />
