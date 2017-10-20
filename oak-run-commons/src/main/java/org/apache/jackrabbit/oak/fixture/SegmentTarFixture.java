@@ -230,7 +230,7 @@ class SegmentTarFixture extends OakFixture {
                 builder.withBlobStore(blobStore);
             } else {
                 blobStoreFixtures[n + i] = BlobStoreFixture.create(parentPath, true, dsCacheSize, statsProvider);
-                blobStore = blobStoreFixtures[n + i].setUp();
+                builder.withBlobStore(blobStoreFixtures[n + i].setUp());
             }
         }
         
@@ -315,11 +315,11 @@ class SegmentTarFixture extends OakFixture {
         
         if (blobStoreFixtures != null) {
             for (BlobStoreFixture bsf : blobStoreFixtures) {
-                bsf.tearDown();
+//                bsf.tearDown();
             }
         }
         
-        FileUtils.deleteQuietly(parentPath);
+//        FileUtils.deleteQuietly(parentPath);
     }
 
     public BlobStoreFixture[] getBlobStoreFixtures() {
