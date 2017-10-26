@@ -21,9 +21,9 @@ import java.lang.management.ManagementFactory;
 import java.net.UnknownHostException;
 
 import javax.sql.DataSource;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.jackrabbit.oak.Oak;
+import org.apache.jackrabbit.oak.fixture.SegmentTarFixture.SegmentTarFixtureBuilder;
 import org.apache.jackrabbit.oak.plugins.document.DocumentMK;
 import org.apache.jackrabbit.oak.plugins.document.rdb.RDBBlobStore;
 import org.apache.jackrabbit.oak.plugins.document.rdb.RDBDataSourceFactory;
@@ -59,6 +59,7 @@ public abstract class OakFixture {
 
     public static final String OAK_SEGMENT_TAR = "Oak-Segment-Tar";
     public static final String OAK_SEGMENT_TAR_DS = "Oak-Segment-Tar-DS";
+    public static final String OAK_SEGMENT_TAR_COLD = "Oak-Segment-Tar-Cold";
 
     public static final String OAK_MULTIPLEXING = "Oak-Multiplexing";
     public static final String OAK_MULTIPLEXING_MEMORY = "Oak-Multiplexing-Memory";
@@ -268,12 +269,6 @@ public abstract class OakFixture {
         return getTar(name, base, maxFileSizeMB, cacheSizeMB, memoryMapping, useBlobStore, 0);
     }
 
-    public static OakFixture getSegmentTar(final String name, final File base,
-        final int maxFileSizeMB, final int cacheSizeMB, final boolean memoryMapping,
-        final boolean useBlobStore) {
-        return getSegmentTar(name, base, maxFileSizeMB, cacheSizeMB, memoryMapping, useBlobStore, 0);
-    }
-
     @Deprecated
     public static OakFixture getTar(
         final String name, final File base, final int maxFileSizeMB, final int cacheSizeMB,
@@ -281,12 +276,42 @@ public abstract class OakFixture {
         return new SegmentFixture(name, base, maxFileSizeMB, cacheSizeMB, memoryMapping, useBlobStore, dsCacheInMB);
     }
 
-    public static OakFixture getSegmentTar(final String name, final File base,
-        final int maxFileSizeMB, final int cacheSizeMB, final boolean memoryMapping,
-        final boolean useBlobStore, final int dsCacheInMB) {
-        return new SegmentTarFixture(name, base, maxFileSizeMB, cacheSizeMB, memoryMapping, useBlobStore, dsCacheInMB);
+    public static OakFixture getSegmentTar(final String name, final File base, final int maxFileSizeMB,
+            final int cacheSizeMB, final boolean memoryMapping, final boolean useBlobStore, final int dsCacheInMB,
+            final boolean withColdStandby, final int syncInterval, final boolean shareBlobStore) {
+        
+            SegmentTarFixtureBuilder builder = SegmentTarFixtureBuilder.segmentTarFixtureBuilder(name, base);
+            builder.withMaxFileSize(maxFileSizeMB)
+                   .withSegmentCacheSize(cacheSizeMB)
+                   .withMemoryMapping(memoryMapping)
+                   .withBlobStore(useBlobStore)
+                   .withDSCacheSize(dsCacheInMB);
+            
+            return new SegmentTarFixture(builder, withColdStandby, syncInterval, shareBlobStore);
+        }
+    
+    public static OakFixture getVanillaSegmentTar(final File base, final int maxFileSizeMB,
+            final int cacheSizeMB, final boolean memoryMapping) {
+
+        return getSegmentTar(OakFixture.OAK_SEGMENT_TAR, base, maxFileSizeMB, cacheSizeMB, memoryMapping, false, 0,
+                false, -1, false);
     }
 
+    public static OakFixture getSegmentTarWithDataStore(final File base,
+        final int maxFileSizeMB, final int cacheSizeMB, final boolean memoryMapping, final int dsCacheInMB) {
+        
+        return getSegmentTar(OakFixture.OAK_SEGMENT_TAR_DS, base, maxFileSizeMB, cacheSizeMB, memoryMapping, true, dsCacheInMB,
+                false, -1, false);
+    }
+    
+    public static OakFixture getSegmentTarWithColdStandby(final File base, final int maxFileSizeMB,
+            final int cacheSizeMB, final boolean memoryMapping, final boolean useBlobStore, final int dsCacheInMB,
+            final int syncInterval, final boolean shareBlobStore) {
+        
+        return getSegmentTar(OakFixture.OAK_SEGMENT_TAR_COLD, base, maxFileSizeMB, cacheSizeMB, memoryMapping, useBlobStore,
+                dsCacheInMB, true, syncInterval, shareBlobStore);
+    }
+    
     public static OakFixture getMultiplexing(final String name, final File base,
                                              final int maxFileSizeMB, final int cacheSizeMB, final boolean memoryMapping,
                                              final int mounts, final int pathsPerMount) {

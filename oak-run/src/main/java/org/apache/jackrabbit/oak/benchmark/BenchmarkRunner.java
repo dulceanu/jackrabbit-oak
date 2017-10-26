@@ -163,6 +163,19 @@ public class BenchmarkRunner {
                 .withOptionalArg().ofType(Integer.class).defaultsTo(2);
         OptionSpec<Integer> pathsPerMount = parser.accepts("pathsPerMount", "Number of paths per one mount.")
                 .withOptionalArg().ofType(Integer.class).defaultsTo(1000);
+        OptionSpec<Integer> coldSyncInterval = parser.accepts("coldSyncInterval", "interval between sync cycles in sec (Segment-Tar-Cold only)")
+                .withRequiredArg().ofType(Integer.class).defaultsTo(5);
+        OptionSpec<Boolean> coldUseDataStore = parser
+                .accepts("useDataStore",
+                        "Whether to use a datastore in the cold standby topology (Segment-Tar-Cold only)")
+                .withOptionalArg().ofType(Boolean.class)
+                .defaultsTo(Boolean.TRUE);
+        OptionSpec<Boolean> coldShareDataStore = parser
+                .accepts("shareDataStore",
+                        "Whether to share the datastore for primary and standby in the cold standby topology (Segment-Tar-Cold only)")
+                .withOptionalArg().ofType(Boolean.class)
+                .defaultsTo(Boolean.FALSE);
+        
         OptionSpec<String> nonOption = parser.nonOptions();
         OptionSpec help = parser.acceptsAll(asList("h", "?", "help"), "show help").forHelp();
         OptionSet options = parser.parse(args);
@@ -195,14 +208,13 @@ public class BenchmarkRunner {
                 OakRepositoryFixture.getMongoNS(uri,
                         dropDBAfterTest.value(options),
                         cacheSize * MB),
-                OakRepositoryFixture.getTar(
-                        base.value(options), 256, cacheSize, mmap.value(options)),
-                OakRepositoryFixture.getTarWithBlobStore(base.value(options), 256, cacheSize,
-                        mmap.value(options), fdsCache.value(options)),
                 OakRepositoryFixture.getSegmentTar(base.value(options), 256, cacheSize,
                         mmap.value(options)),
-                OakRepositoryFixture.getSegmentTarWithBlobStore(base.value(options), 256, cacheSize,
+                OakRepositoryFixture.getSegmentTarWithDataStore(base.value(options), 256, cacheSize,
                         mmap.value(options), fdsCache.value(options)),
+                OakRepositoryFixture.getSegmentTarWithColdStandby(base.value(options), 256, cacheSize,
+                        mmap.value(options), coldUseDataStore.value(options), fdsCache.value(options), 
+                        coldSyncInterval.value(options), coldShareDataStore.value(options)),
                 OakRepositoryFixture.getRDB(rdbjdbcuri.value(options), rdbjdbcuser.value(options),
                         rdbjdbcpasswd.value(options), rdbjdbctableprefix.value(options), 
                         dropDBAfterTest.value(options), cacheSize * MB),
