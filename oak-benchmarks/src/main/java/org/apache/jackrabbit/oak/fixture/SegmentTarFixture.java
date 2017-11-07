@@ -309,10 +309,19 @@ class SegmentTarFixture extends OakFixture {
             }
         }
         
-        for (FileStore store : stores) {
+        for (int i = 0; i < stores.length; i++) {
+            FileStore store = stores[i];
+            
+            if (withColdStandby) {
+                if (i < stores.length / 2) {
+                    System.out.println("Primary " + i + " cache stats:");
+                    System.out.println(store.getSegmentCacheStats().cacheInfoAsString());
+                }
+            }
+            
             store.close();
         }
-        
+            
         if (blobStoreFixtures != null) {
             for (BlobStoreFixture bsf : blobStoreFixtures) {
 //                bsf.tearDown();
