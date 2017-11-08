@@ -36,6 +36,7 @@ import org.apache.jackrabbit.oak.segment.RecordId;
 import org.apache.jackrabbit.oak.segment.Segment;
 import org.apache.jackrabbit.oak.segment.SegmentGraph.SegmentGraphVisitor;
 import org.apache.jackrabbit.oak.segment.SegmentId;
+import org.apache.jackrabbit.oak.segment.SegmentNotFoundExceptionListener;
 import org.apache.jackrabbit.oak.segment.SegmentWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -131,7 +132,7 @@ public class ReadOnlyFileStore extends AbstractFileStore {
                 public Segment call() throws Exception {
                     return readSegmentUncached(tarFiles, id);
                 }
-            });
+            }, SegmentNotFoundExceptionListener.LOG_SNFE);
         } catch (ExecutionException e) {
             throw asSegmentNotFoundException(e, id);
         }

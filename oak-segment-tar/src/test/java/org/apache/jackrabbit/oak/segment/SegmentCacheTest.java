@@ -49,13 +49,13 @@ public class SegmentCacheTest {
 
         // Segment should be cached with the segmentId and thus not trigger a call
         // to the (empty) node store.
-        assertEquals(segment1, cache.getSegment(id1, id1::getSegment));
+        assertEquals(segment1, cache.getSegment(id1, id1::getSegment, SegmentNotFoundExceptionListener.LOG_SNFE));
     }
 
     @Test
     public void invalidateTests() throws ExecutionException {
         cache.putSegment(segment1);
-        assertEquals(segment1, cache.getSegment(id1, id1::getSegment));
+        assertEquals(segment1, cache.getSegment(id1, id1::getSegment, SegmentNotFoundExceptionListener.LOG_SNFE));
 
         // Clearing the cache should cause an eviction call back for id
         cache.clear();
@@ -65,7 +65,7 @@ public class SegmentCacheTest {
         assertEquals(segment1, cache.getSegment(id1, () -> {
             cached.set(false);
             return segment1;
-        }));
+        }, SegmentNotFoundExceptionListener.LOG_SNFE));
         assertFalse(cached.get());
     }
 
@@ -81,7 +81,7 @@ public class SegmentCacheTest {
         assertEquals(0, stats.getRequestCount());
 
         // load
-        cache.getSegment(id1, () -> segment1);
+        cache.getSegment(id1, () -> segment1, SegmentNotFoundExceptionListener.LOG_SNFE);
         assertEquals(1, stats.getElementCount());
         assertEquals(1, stats.getLoadCount());
         assertEquals(0, stats.getHitCount());

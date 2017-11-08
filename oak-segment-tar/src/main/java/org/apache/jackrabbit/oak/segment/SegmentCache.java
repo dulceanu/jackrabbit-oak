@@ -118,8 +118,7 @@ public class SegmentCache {
      * @throws ExecutionException  when {@code loader} failed to load an segment
      */
     @Nonnull
-    public Segment getSegment(@Nonnull final SegmentId id, @Nonnull final Callable<Segment> loader)
-    throws ExecutionException {
+    public Segment getSegment(@Nonnull final SegmentId id, @Nonnull final Callable<Segment> loader, @Nonnull SegmentNotFoundExceptionListener snfeListener) throws ExecutionException {
         // Load bulk segment directly without putting it in cache
         try {
             if (id.isBulkSegmentId()) {
@@ -129,19 +128,38 @@ public class SegmentCache {
             throw new ExecutionException(e);
         }
 
-        // Load data segment and put it in the cache
         try {
-            long t0 = System.nanoTime();
-            Segment segment = loader.call();
-            stats.loadSuccessCount.incrementAndGet();
-            stats.loadTime.addAndGet(System.nanoTime() - t0);
-            stats.missCount.incrementAndGet();
-
-            return put(id, segment);
+        Segment segment = cache.get(id, newStatsUpdateLoader(loader));
+        id.loaded(segment);
+        return segment;
         } catch (Exception e) {
-            stats.loadExceptionCount.incrementAndGet();
-            throw new ExecutionException(e);
+            SegmentNotFoundException snfe = asSegmentNotFoundException(e, id);
+            snfeListener.notify(id, snfe);
+            throw snfe;
         }
+    }
+    
+    static SegmentNotFoundException asSegmentNotFoundException(Exception e, SegmentId id) {
+        if (e.getCause() instanceof SegmentNotFoundException) {
+            return (SegmentNotFoundException) e.getCause();
+        }
+        return new SegmentNotFoundException(id, e);
+    }
+
+    private Callable<Segment> newStatsUpdateLoader(Callable<Segment> loader) {
+        return () -> {
+            try {
+                long t0 = System.nanoTime();
+                Segment segment = loader.call();
+                stats.loadSuccessCount.incrementAndGet();
+                stats.loadTime.addAndGet(System.nanoTime() - t0);
+                stats.missCount.incrementAndGet();
+                return segment;
+            } catch (Exception e) {
+                stats.loadExceptionCount.incrementAndGet();
+                throw e;
+            }
+        };
     }
 
     /**
