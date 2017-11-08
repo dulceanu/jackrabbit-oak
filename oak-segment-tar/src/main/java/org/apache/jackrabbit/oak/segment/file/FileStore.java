@@ -460,7 +460,7 @@ public class FileStore extends AbstractFileStore {
                 public Segment call() throws Exception {
                     return readSegmentUncached(tarFiles, id);
                 }
-            });
+            }, snfeListener);
         } catch (ExecutionException e) {
             SegmentNotFoundException snfe = asSegmentNotFoundException(e, id);
             snfeListener.notify(id, snfe);
