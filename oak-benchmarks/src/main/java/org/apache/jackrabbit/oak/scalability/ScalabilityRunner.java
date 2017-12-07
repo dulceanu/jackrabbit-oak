@@ -58,7 +58,7 @@ import org.apache.jackrabbit.oak.scalability.benchmarks.search.SplitOrderBySearc
 import org.apache.jackrabbit.oak.scalability.suites.ScalabilityBlobSearchSuite;
 import org.apache.jackrabbit.oak.scalability.suites.ScalabilityNodeRelationshipSuite;
 import org.apache.jackrabbit.oak.scalability.suites.ScalabilityNodeSuite;
-
+import org.apache.jackrabbit.oak.scalability.suites.ScalabilityStandbySuite;
 import com.google.common.base.Charsets;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
@@ -113,6 +113,19 @@ public class ScalabilityRunner {
         OptionSpec<File> csvFile =
                 parser.accepts("csvFile", "File to write a CSV version of the benchmark data.")
                         .withOptionalArg().ofType(File.class);
+        OptionSpec<Integer> coldSyncInterval = parser.accepts("coldSyncInterval", "interval between sync cycles in sec (Segment-Tar-Cold only)")
+                .withRequiredArg().ofType(Integer.class).defaultsTo(5);
+        OptionSpec<Boolean> coldUseDataStore = parser
+                .accepts("useDataStore",
+                        "Whether to use a datastore in the cold standby topology (Segment-Tar-Cold only)")
+                .withOptionalArg().ofType(Boolean.class)
+                .defaultsTo(Boolean.TRUE);
+        OptionSpec<Boolean> coldShareDataStore = parser
+                .accepts("shareDataStore",
+                        "Whether to share the datastore for primary and standby in the cold standby topology (Segment-Tar-Cold only)")
+                .withOptionalArg().ofType(Boolean.class)
+                .defaultsTo(Boolean.FALSE);
+        
         OptionSpec help = parser.acceptsAll(asList("h", "?", "help"), "show help").forHelp();
         OptionSpec<String> nonOption = parser.nonOptions();
 
@@ -145,6 +158,9 @@ public class ScalabilityRunner {
                     base.value(options), 256, cacheSize, mmap.value(options)),
                 OakRepositoryFixture.getSegmentTarWithDataStore(base.value(options), 256, cacheSize,
                     mmap.value(options), fdsCache.value(options)),
+                OakRepositoryFixture.getSegmentTarWithColdStandby(base.value(options), 256, cacheSize,
+                        mmap.value(options), coldUseDataStore.value(options), fdsCache.value(options), 
+                        coldSyncInterval.value(options), coldShareDataStore.value(options)),
                 OakRepositoryFixture.getRDB(rdbjdbcuri.value(options), rdbjdbcuser.value(options),
                     rdbjdbcpasswd.value(options), rdbjdbctableprefix.value(options),
                     dropDBAfterTest.value(options), cacheSize * MB, -1),
@@ -182,6 +198,8 @@ public class ScalabilityRunner {
                                         new ConcurrentReader(),
                                         new ConcurrentWriter()),
                         new ScalabilityNodeRelationshipSuite(withStorage.value(options))
+                                .addBenchmarks(new AggregateNodeSearcher()),
+                        new ScalabilityStandbySuite()
                                 .addBenchmarks(new AggregateNodeSearcher())
                 };
 
