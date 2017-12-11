@@ -218,7 +218,7 @@ public class BenchmarkRunner {
                         mmap.value(options), fdsCache.value(options)),
                 OakRepositoryFixture.getSegmentTarWithColdStandby(base.value(options), 256, cacheSize,
                         mmap.value(options), coldUseDataStore.value(options), fdsCache.value(options), 
-                        coldSyncInterval.value(options), coldShareDataStore.value(options)),
+                        coldSyncInterval.value(options), coldShareDataStore.value(options), false),
                 OakRepositoryFixture.getRDB(rdbjdbcuri.value(options), rdbjdbcuser.value(options),
                         rdbjdbcpasswd.value(options), rdbjdbctableprefix.value(options), 
                         dropDBAfterTest.value(options), cacheSize * MB, vgcMaxAge.value(options)),

@@ -314,7 +314,7 @@ public abstract class OakFixture {
 
     public static OakFixture getSegmentTar(final String name, final File base, final int maxFileSizeMB,
             final int cacheSizeMB, final boolean memoryMapping, final boolean useBlobStore, final int dsCacheInMB,
-            final boolean withColdStandby, final int syncInterval, final boolean shareBlobStore) {
+            final boolean withColdStandby, final int syncInterval, final boolean shareBlobStore, final boolean oneShotRun) {
         
             SegmentTarFixtureBuilder builder = SegmentTarFixtureBuilder.segmentTarFixtureBuilder(name, base);
             builder.withMaxFileSize(maxFileSizeMB)
@@ -323,29 +323,29 @@ public abstract class OakFixture {
                    .withBlobStore(useBlobStore)
                    .withDSCacheSize(dsCacheInMB);
             
-            return new SegmentTarFixture(builder, withColdStandby, syncInterval, shareBlobStore);
+            return new SegmentTarFixture(builder, withColdStandby, syncInterval, shareBlobStore, oneShotRun);
         }
     
     public static OakFixture getVanillaSegmentTar(final File base, final int maxFileSizeMB,
             final int cacheSizeMB, final boolean memoryMapping) {
 
         return getSegmentTar(OakFixture.OAK_SEGMENT_TAR, base, maxFileSizeMB, cacheSizeMB, memoryMapping, false, 0,
-                false, -1, false);
+                false, -1, false, false);
     }
 
     public static OakFixture getSegmentTarWithDataStore(final File base,
         final int maxFileSizeMB, final int cacheSizeMB, final boolean memoryMapping, final int dsCacheInMB) {
         
         return getSegmentTar(OakFixture.OAK_SEGMENT_TAR_DS, base, maxFileSizeMB, cacheSizeMB, memoryMapping, true, dsCacheInMB,
-                false, -1, false);
+                false, -1, false, false);
     }
     
     public static OakFixture getSegmentTarWithColdStandby(final File base, final int maxFileSizeMB,
             final int cacheSizeMB, final boolean memoryMapping, final boolean useBlobStore, final int dsCacheInMB,
-            final int syncInterval, final boolean shareBlobStore) {
+            final int syncInterval, final boolean shareBlobStore, final boolean oneShotRun) {
         
         return getSegmentTar(OakFixture.OAK_SEGMENT_TAR_COLD, base, maxFileSizeMB, cacheSizeMB, memoryMapping, useBlobStore,
-                dsCacheInMB, true, syncInterval, shareBlobStore);
+                dsCacheInMB, true, syncInterval, shareBlobStore, oneShotRun);
     }
 
     public static OakFixture getCompositeStore(final String name, final File base,

@@ -55,6 +55,7 @@ import org.apache.jackrabbit.oak.scalability.benchmarks.search.OrderBySearcher;
 import org.apache.jackrabbit.oak.scalability.benchmarks.search.SplitOrderByKeysetPageSearcher;
 import org.apache.jackrabbit.oak.scalability.benchmarks.search.SplitOrderByOffsetPageSearcher;
 import org.apache.jackrabbit.oak.scalability.benchmarks.search.SplitOrderBySearcher;
+import org.apache.jackrabbit.oak.scalability.benchmarks.segment.standby.StandbyBulkTransferBenchmark;
 import org.apache.jackrabbit.oak.scalability.suites.ScalabilityBlobSearchSuite;
 import org.apache.jackrabbit.oak.scalability.suites.ScalabilityNodeRelationshipSuite;
 import org.apache.jackrabbit.oak.scalability.suites.ScalabilityNodeSuite;
@@ -125,6 +126,11 @@ public class ScalabilityRunner {
                         "Whether to share the datastore for primary and standby in the cold standby topology (Segment-Tar-Cold only)")
                 .withOptionalArg().ofType(Boolean.class)
                 .defaultsTo(Boolean.FALSE);
+        OptionSpec<Boolean> coldOneShotRun = parser
+                .accepts("oneShotRun",
+                        "Whether to do a continuous sync between client and server or sync only once (Segment-Tar-Cold only)")
+                .withOptionalArg().ofType(Boolean.class)
+                .defaultsTo(Boolean.TRUE);
         
         OptionSpec help = parser.acceptsAll(asList("h", "?", "help"), "show help").forHelp();
         OptionSpec<String> nonOption = parser.nonOptions();
@@ -160,7 +166,7 @@ public class ScalabilityRunner {
                     mmap.value(options), fdsCache.value(options)),
                 OakRepositoryFixture.getSegmentTarWithColdStandby(base.value(options), 256, cacheSize,
                         mmap.value(options), coldUseDataStore.value(options), fdsCache.value(options), 
-                        coldSyncInterval.value(options), coldShareDataStore.value(options)),
+                        coldSyncInterval.value(options), coldShareDataStore.value(options), coldOneShotRun.value(options)),
                 OakRepositoryFixture.getRDB(rdbjdbcuri.value(options), rdbjdbcuser.value(options),
                     rdbjdbcpasswd.value(options), rdbjdbctableprefix.value(options),
                     dropDBAfterTest.value(options), cacheSize * MB, -1),
@@ -200,7 +206,7 @@ public class ScalabilityRunner {
                         new ScalabilityNodeRelationshipSuite(withStorage.value(options))
                                 .addBenchmarks(new AggregateNodeSearcher()),
                         new ScalabilityStandbySuite()
-                                .addBenchmarks(new AggregateNodeSearcher())
+                                .addBenchmarks(new StandbyBulkTransferBenchmark())
                 };
 
         Set<String> argset = Sets.newHashSet(nonOption.values(options));
