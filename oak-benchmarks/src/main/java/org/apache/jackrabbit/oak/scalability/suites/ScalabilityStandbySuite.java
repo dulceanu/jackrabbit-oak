@@ -48,17 +48,19 @@ public class ScalabilityStandbySuite extends ScalabilityAbstractSuite {
     public void setUp(Repository repository, RepositoryFixture fixture, Credentials credentials) throws Exception {
         super.setUp(repository, fixture, credentials);
 
-        if (fixture instanceof OakRepositoryFixture) {
-            OakRepositoryFixture orf = (OakRepositoryFixture) fixture;
-            SegmentTarFixture stf = (SegmentTarFixture) orf.getOakFixture();
+        if (!(fixture instanceof OakRepositoryFixture)) {
+            return;
+        }
 
-            if (orf.toString().equals(OakFixture.OAK_SEGMENT_TAR_COLD)) {
+        OakRepositoryFixture orf = (OakRepositoryFixture) fixture;
+        SegmentTarFixture stf = (SegmentTarFixture) orf.getOakFixture();
 
-                Map<Object, Object> contextMap = context.getMap();
-                contextMap.put("clientSyncs", stf.getClientSyncs());
-                contextMap.put("serverSyncs", stf.getServerSyncs());
-                contextMap.put("stores", stf.getStores());
-            }
+        if (orf.toString().equals(OakFixture.OAK_SEGMENT_TAR_COLD)) {
+
+            Map<Object, Object> contextMap = context.getMap();
+            contextMap.put("clientSyncs", stf.getClientSyncs());
+            contextMap.put("serverSyncs", stf.getServerSyncs());
+            contextMap.put("stores", stf.getStores());
         } else {
             throw new IllegalArgumentException(
                     "Cannot run ScalabilityStandbySuite on current fixture. Use Oak-Segment-Tar-Cold instead!");
