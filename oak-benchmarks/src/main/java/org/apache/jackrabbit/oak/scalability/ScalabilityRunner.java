@@ -131,6 +131,11 @@ public class ScalabilityRunner {
                         "Whether to do a continuous sync between client and server or sync only once (Segment-Tar-Cold only)")
                 .withOptionalArg().ofType(Boolean.class)
                 .defaultsTo(Boolean.TRUE);
+        OptionSpec<Boolean> coldSecure = parser
+                .accepts("secure",
+                        "Whether to enable secure communication between primary and standby in the cold standby topology (Segment-Tar-Cold only)")
+                .withOptionalArg().ofType(Boolean.class)
+                .defaultsTo(Boolean.FALSE);
         
         OptionSpec help = parser.acceptsAll(asList("h", "?", "help"), "show help").forHelp();
         OptionSpec<String> nonOption = parser.nonOptions();
@@ -166,7 +171,8 @@ public class ScalabilityRunner {
                     mmap.value(options), fdsCache.value(options)),
                 OakRepositoryFixture.getSegmentTarWithColdStandby(base.value(options), 256, cacheSize,
                         mmap.value(options), coldUseDataStore.value(options), fdsCache.value(options), 
-                        coldSyncInterval.value(options), coldShareDataStore.value(options), coldOneShotRun.value(options)),
+                        coldSyncInterval.value(options), coldShareDataStore.value(options), coldSecure.value(options), 
+                        coldOneShotRun.value(options)),
                 OakRepositoryFixture.getRDB(rdbjdbcuri.value(options), rdbjdbcuser.value(options),
                     rdbjdbcpasswd.value(options), rdbjdbctableprefix.value(options),
                     dropDBAfterTest.value(options), cacheSize * MB, -1),

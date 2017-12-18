@@ -178,6 +178,11 @@ public class BenchmarkRunner {
                         "Whether to share the datastore for primary and standby in the cold standby topology (Segment-Tar-Cold only)")
                 .withOptionalArg().ofType(Boolean.class)
                 .defaultsTo(Boolean.FALSE);
+        OptionSpec<Boolean> coldSecure = parser
+                .accepts("secure",
+                        "Whether to enable secure communication between primary and standby in the cold standby topology (Segment-Tar-Cold only)")
+                .withOptionalArg().ofType(Boolean.class)
+                .defaultsTo(Boolean.FALSE);
         
         OptionSpec<?> verbose = parser.accepts("verbose", "Enable verbose output");
         OptionSpec<String> nonOption = parser.nonOptions();
@@ -218,7 +223,7 @@ public class BenchmarkRunner {
                         mmap.value(options), fdsCache.value(options)),
                 OakRepositoryFixture.getSegmentTarWithColdStandby(base.value(options), 256, cacheSize,
                         mmap.value(options), coldUseDataStore.value(options), fdsCache.value(options), 
-                        coldSyncInterval.value(options), coldShareDataStore.value(options), false),
+                        coldSyncInterval.value(options), coldShareDataStore.value(options), coldSecure.value(options), false),
                 OakRepositoryFixture.getRDB(rdbjdbcuri.value(options), rdbjdbcuser.value(options),
                         rdbjdbcpasswd.value(options), rdbjdbctableprefix.value(options), 
                         dropDBAfterTest.value(options), cacheSize * MB, vgcMaxAge.value(options)),
