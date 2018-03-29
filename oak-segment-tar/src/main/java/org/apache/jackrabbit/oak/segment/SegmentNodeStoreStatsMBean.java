@@ -47,10 +47,18 @@ public interface SegmentNodeStoreStatsMBean {
     CompositeData getQueuingTimes();
     
     /**
-     * @return tabular data of the form <commits,writer>
+     * @return tabular data of the form <commits,writerGroup> collected 
+     *         <b>in the last minute</b>
      * @throws OpenDataException if data is not available
      */
-    TabularData getCommitsCountPerWriter() throws OpenDataException;
+    TabularData getCommitsCountPerGroupLastMinute() throws OpenDataException;
+    
+    /**
+     * @return tabular data of the form <commits,writer> for threads 
+     *         not included in groups
+     * @throws OpenDataException if data is not available
+     */
+    TabularData getCommitsCountOtherThreads() throws OpenDataException;
     
     /**
      * @return tabular data of the form <writer,writerDetails> for each writer
@@ -72,7 +80,8 @@ public interface SegmentNodeStoreStatsMBean {
     boolean isCollectStackTraces();
     
     /**
-     * Modifies the maximum number of writing threads to be recorded.
+     * Modifies the maximum number of writing threads to be recorded for 
+     * threads not included in groups..
      * Changing the default value will reset the overall collection process.
      * 
      * @param commitsCountMapSize the new size
@@ -83,4 +92,16 @@ public interface SegmentNodeStoreStatsMBean {
      * @return maximum number of writing threads to be recorded
      */
     int getCommitsCountMapMaxSize();
+    
+    /**
+     * @return current groups used for grouping collected threads.
+     */
+    String[] getThreadGroups();
+
+    /**
+     * Modifies the groups used for grouping collected threads.
+     * Changing the default value will reset the overall collection process.
+     * @param threadGroups
+     */
+    void setThreadGroups(String[] threadGroups);
 }

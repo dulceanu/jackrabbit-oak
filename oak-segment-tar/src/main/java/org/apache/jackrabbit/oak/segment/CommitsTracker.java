@@ -19,6 +19,9 @@
 
 package org.apache.jackrabbit.oak.segment;
 
+import static java.lang.String.format;
+import static java.util.concurrent.TimeUnit.MINUTES;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +29,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Stream;
 
 import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap;
+import org.apache.jackrabbit.oak.segment.file.Scheduler;
 
 /**
  * A simple tracker for the source of commits (writes) in
@@ -36,19 +40,29 @@ import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap;
  * currently waiting on the commit semaphore
  * </ul>
  * 
- * This class delegates thread-safety to its underlying state variables. 
+ * This class delegates thread-safety to its underlying state variables.
  */
 class CommitsTracker {
     private volatile boolean collectStackTraces;
+    private Map<String, Long> commitsCountPerThreadGroupLastMinute = new HashMap<>();
 
+    private final String[] threadGroups;
     private final ConcurrentMap<String, String> queuedWritersMap;
-    private final ConcurrentMap<String, Long> commitsCountMap;
+    private final ConcurrentMap<String, Long> commitsCountPerThreadGroup;
+    private final ConcurrentMap<String, Long> commitsCountOtherThreads;
 
-    CommitsTracker(int commitsCountMapMaxSize, boolean collectStackTraces) {
+    private final Scheduler commitsTrackerScheduler = new Scheduler("CommitsTracker background tasks");
+
+    CommitsTracker(String[] threadGroups, int commitsCountMapMaxSize, boolean collectStackTraces) {
+        this.threadGroups = threadGroups;
         this.collectStackTraces = collectStackTraces;
-        this.commitsCountMap = new ConcurrentLinkedHashMap.Builder<String, Long>()
+        this.commitsCountPerThreadGroup = new ConcurrentHashMap<>();
+        this.commitsCountOtherThreads = new ConcurrentLinkedHashMap.Builder<String, Long>()
                 .maximumWeightedCapacity(commitsCountMapMaxSize).build();
         this.queuedWritersMap = new ConcurrentHashMap<>();
+
+        commitsTrackerScheduler.scheduleWithFixedDelay(format("TarMK commits tracker stats resetter"), 1, MINUTES,
+                this::resetStatistics);
     }
 
     public void trackQueuedCommitOf(Thread t) {
@@ -67,19 +81,56 @@ class CommitsTracker {
     }
 
     public void trackExecutedCommitOf(Thread t) {
-        commitsCountMap.compute(t.getName(), (w, v) -> v == null ? 1 : v + 1);
+        String group = findGroupFor(t);
+
+        if (group.equals("other")) {
+            commitsCountOtherThreads.compute(t.getName(), (w, v) -> v == null ? 1 : v + 1);
+        }
+
+        commitsCountPerThreadGroup.compute(group, (w, v) -> v == null ? 1 : v + 1);
+    }
+
+    private String findGroupFor(Thread t) {
+        if (threadGroups == null) {
+            return "other";
+        }
+        
+        for (String group : threadGroups) {
+            if (t.getName().matches(group)) {
+                return group;
+            }
+        }
+
+        return "other";
+    }
+
+    private void resetStatistics() {
+        commitsCountPerThreadGroupLastMinute = new HashMap<>(commitsCountPerThreadGroup);
+        commitsCountPerThreadGroup.clear();
+        commitsCountOtherThreads.clear();
     }
 
     public void setCollectStackTraces(boolean flag) {
         this.collectStackTraces = flag;
     }
     
+    public void close() {
+        commitsTrackerScheduler.close();
+    }
+
     public Map<String, String> getQueuedWritersMap() {
         return new HashMap<>(queuedWritersMap);
     }
 
-    public Map<String, Long> getCommitsCountMap() {
-        return new HashMap<>(commitsCountMap);
+    public Map<String, Long> getCommitsCountPerGroupLastMinute() {
+        return new HashMap<>(commitsCountPerThreadGroupLastMinute);
     }
 
+    public Map<String, Long> getCommitsCountOthers() {
+        return new HashMap<>(commitsCountOtherThreads);
+    }
+    
+    Map<String, Long> getCommitsCountPerGroup() {
+        return new HashMap<>(commitsCountPerThreadGroup);
+    }
 }
