@@ -19,9 +19,9 @@
 
 package org.apache.jackrabbit.oak.segment;
 
-import static java.lang.String.format;
 import static java.util.concurrent.TimeUnit.MINUTES;
 
+import java.io.Closeable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,26 +42,25 @@ import org.apache.jackrabbit.oak.segment.file.Scheduler;
  * 
  * This class delegates thread-safety to its underlying state variables.
  */
-class CommitsTracker {
-    private volatile boolean collectStackTraces;
-    private Map<String, Long> commitsCountPerThreadGroupLastMinute = new HashMap<>();
-
+class CommitsTracker implements Closeable {
+    private final boolean collectStackTraces;
     private final String[] threadGroups;
     private final ConcurrentMap<String, String> queuedWritersMap;
     private final ConcurrentMap<String, Long> commitsCountPerThreadGroup;
     private final ConcurrentMap<String, Long> commitsCountOtherThreads;
-
+    private final ConcurrentMap<String, Long> commitsCountPerThreadGroupLastMinute;
     private final Scheduler commitsTrackerScheduler = new Scheduler("CommitsTracker background tasks");
 
-    CommitsTracker(String[] threadGroups, int commitsCountMapMaxSize, boolean collectStackTraces) {
+    CommitsTracker(String[] threadGroups, int otherWritersLimit, boolean collectStackTraces) {
         this.threadGroups = threadGroups;
         this.collectStackTraces = collectStackTraces;
         this.commitsCountPerThreadGroup = new ConcurrentHashMap<>();
+        this.commitsCountPerThreadGroupLastMinute = new ConcurrentHashMap<>();
         this.commitsCountOtherThreads = new ConcurrentLinkedHashMap.Builder<String, Long>()
-                .maximumWeightedCapacity(commitsCountMapMaxSize).build();
+                .maximumWeightedCapacity(otherWritersLimit).build();
         this.queuedWritersMap = new ConcurrentHashMap<>();
 
-        commitsTrackerScheduler.scheduleWithFixedDelay(format("TarMK commits tracker stats resetter"), 1, MINUTES,
+        commitsTrackerScheduler.scheduleWithFixedDelay("TarMK commits tracker stats resetter", 1, MINUTES,
                 this::resetStatistics);
     }
 
@@ -105,15 +104,13 @@ class CommitsTracker {
     }
 
     private void resetStatistics() {
-        commitsCountPerThreadGroupLastMinute = new HashMap<>(commitsCountPerThreadGroup);
+        commitsCountPerThreadGroupLastMinute.clear();
+        commitsCountPerThreadGroupLastMinute.putAll(commitsCountPerThreadGroup);
         commitsCountPerThreadGroup.clear();
         commitsCountOtherThreads.clear();
     }
 
-    public void setCollectStackTraces(boolean flag) {
-        this.collectStackTraces = flag;
-    }
-    
+    @Override
     public void close() {
         commitsTrackerScheduler.close();
     }

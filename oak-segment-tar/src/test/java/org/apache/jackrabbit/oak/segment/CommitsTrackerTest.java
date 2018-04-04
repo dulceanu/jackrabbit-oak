@@ -96,6 +96,7 @@ public class CommitsTrackerTest {
             queuedWritersMap = commitsTracker.getQueuedWritersMap();
             assertEquals(0, queuedWritersMap.size());
         } finally {
+            commitsTracker.close();
             new ExecutorCloser(executorService).close();
         }
     }
@@ -130,6 +131,7 @@ public class CommitsTrackerTest {
                 assertEquals(10, (long) groupCount);
             }
         } finally {
+            commitsTracker.close();
             new ExecutorCloser(executorService).close();
         }
     }

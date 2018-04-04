@@ -51,14 +51,14 @@ public interface SegmentNodeStoreStatsMBean {
      *         <b>in the last minute</b>
      * @throws OpenDataException if data is not available
      */
-    TabularData getCommitsCountPerGroupLastMinute() throws OpenDataException;
+    TabularData getCommitsCountPerWriterGroupLastMinute() throws OpenDataException;
     
     /**
      * @return tabular data of the form <commits,writer> for threads 
      *         not included in groups
      * @throws OpenDataException if data is not available
      */
-    TabularData getCommitsCountOtherThreads() throws OpenDataException;
+    TabularData getCommitsCountForOtherWriters() throws OpenDataException;
     
     /**
      * @return tabular data of the form <writer,writerDetails> for each writer
@@ -80,28 +80,29 @@ public interface SegmentNodeStoreStatsMBean {
     boolean isCollectStackTraces();
     
     /**
-     * Modifies the maximum number of writing threads to be recorded for 
-     * threads not included in groups..
+     * Modifies the maximum number of writers outside already defined
+     * groups to be recorded.
      * Changing the default value will reset the overall collection process.
      * 
-     * @param commitsCountMapSize the new size
+     * @param otherWritersLimit the new size
      */
-    void setCommitsCountMapMaxSize(int commitsCountMapMaxSize);
+    void setNumberOfOtherWritersToDetail(int otherWritersLimit);
     
     /**
-     * @return maximum number of writing threads to be recorded
+     * @return maximum number of writers outside already defined
+     * groups to be recorded
      */
-    int getCommitsCountMapMaxSize();
+    int getNumberOfOtherWritersToDetail();
     
     /**
-     * @return current groups used for grouping collected threads.
+     * @return current groups used for grouping writers.
      */
-    String[] getThreadGroups();
+    String[] getWriterGroupsForLastMinuteCounts();
 
     /**
-     * Modifies the groups used for grouping collected threads.
+     * Modifies the groups used for grouping writers.
      * Changing the default value will reset the overall collection process.
-     * @param threadGroups
+     * @param writerGroups groups defined by regexps
      */
-    void setThreadGroups(String[] threadGroups);
+    void setWriterGroupsForLastMinuteCounts(String[] writerGroups);
 }
