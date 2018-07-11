@@ -20,10 +20,12 @@ import static org.apache.commons.lang.StringUtils.removeStart;
 import static org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory.isJcr2Repository;
 import static org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory.isRepositoryXml;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_OLD_PREFIX;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_AZURE_PREFIX;
 
 import org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.JdbcFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.MongoFactory;
+import org.apache.jackrabbit.oak.upgrade.cli.node.SegmentAzureFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.SegmentFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.SegmentTarFactory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.StoreFactory;
@@ -151,6 +153,31 @@ public enum StoreType {
         public boolean isSupportLongNames() {
             return true;
         }
+    },
+    SEGMENT_AZURE {
+        @Override
+        public boolean matches(String argument) {
+            return argument.startsWith("az:");
+        }
+
+        @Override
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
+            String uri = removeStart(paths[0], SEGMENT_AZURE_PREFIX);
+            int lastSlashPos = uri.lastIndexOf('/');
+            int doubleSlashPos = uri.indexOf("//");
+            int firstDotPos = uri.indexOf(".");
+            
+            String accountName = uri.substring(doubleSlashPos + 2, firstDotPos);
+            String storageUri = uri.substring(0, lastSlashPos);
+            String dir = uri.substring(lastSlashPos + 1);
+            
+            return new StoreFactory(new SegmentAzureFactory(accountName, storageUri, dir, direction == MigrationDirection.SRC));
+        }
+
+        @Override
+        public boolean isSupportLongNames() {
+            return true;
+        }
     };
 
     public static StoreType getMatchingType(String argument) {
@@ -169,6 +196,6 @@ public enum StoreType {
     public abstract boolean isSupportLongNames();
 
     public boolean isSegment() {
-        return this == SEGMENT || this == SEGMENT_TAR;
+        return this == SEGMENT || this == SEGMENT_TAR || this == SEGMENT_AZURE;
     }
 }

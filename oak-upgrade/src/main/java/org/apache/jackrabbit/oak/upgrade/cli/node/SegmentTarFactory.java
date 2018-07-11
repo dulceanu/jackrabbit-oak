@@ -17,12 +17,11 @@
 package org.apache.jackrabbit.oak.upgrade.cli.node;
 
 import static org.apache.jackrabbit.oak.segment.file.FileStoreBuilder.fileStoreBuilder;
+import static org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils.asCloseable;
 
-import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 
-import com.google.common.io.Closer;
 import org.apache.jackrabbit.oak.segment.RecordType;
 import org.apache.jackrabbit.oak.segment.Segment;
 import org.apache.jackrabbit.oak.segment.SegmentId;
@@ -35,6 +34,8 @@ import org.apache.jackrabbit.oak.segment.file.ReadOnlyFileStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.apache.jackrabbit.oak.spi.state.ProxyNodeStore;
+
+import com.google.common.io.Closer;
 
 public class SegmentTarFactory implements NodeStoreFactory {
 
@@ -127,24 +128,6 @@ public class SegmentTarFactory implements NodeStoreFactory {
 
     public File getRepositoryDir() {
         return dir;
-    }
-
-    private static Closeable asCloseable(final ReadOnlyFileStore fs) {
-        return new Closeable() {
-            @Override
-            public void close() throws IOException {
-                fs.close();
-            }
-        };
-    }
-
-    private static Closeable asCloseable(final FileStore fs) {
-        return new Closeable() {
-            @Override
-            public void close() throws IOException {
-                fs.close();
-            }
-        };
     }
 
     @Override
