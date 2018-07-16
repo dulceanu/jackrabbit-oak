@@ -19,8 +19,13 @@ package org.apache.jackrabbit.oak.upgrade.cli.node;
 import java.io.Closeable;
 import java.io.IOException;
 
+import org.apache.jackrabbit.oak.segment.RecordType;
+import org.apache.jackrabbit.oak.segment.Segment;
+import org.apache.jackrabbit.oak.segment.SegmentId;
+import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.ReadOnlyFileStore;
+import org.apache.jackrabbit.oak.spi.state.ProxyNodeStore;
 
 public class FileStoreUtils {
     private FileStoreUtils() {
@@ -45,4 +50,53 @@ public class FileStoreUtils {
         };
     }
 
+    public static boolean hasExternalBlobReferences(ReadOnlyFileStore fs) {
+        try {
+            for (SegmentId id : fs.getSegmentIds()) {
+                if (!id.isDataSegmentId()) {
+                    continue;
+                }
+                id.getSegment().forEachRecord(new Segment.RecordConsumer() {
+                    @Override
+                    public void consume(int number, RecordType type, int offset) {
+                        // FIXME the consumer should allow to stop processing
+                        // see java.nio.file.FileVisitor
+                        if (type == RecordType.BLOB_ID) {
+                            throw new ExternalBlobFound();
+                        }
+                    }
+                });
+            }
+            return false;
+        } catch (ExternalBlobFound e) {
+            return true;
+        } finally {
+            fs.close();
+        }
+    }
+    
+    private static class ExternalBlobFound extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+    
+    public static class NodeStoreWithFileStore extends ProxyNodeStore {
+
+        private final SegmentNodeStore segmentNodeStore;
+
+        private final FileStore fileStore;
+
+        public NodeStoreWithFileStore(SegmentNodeStore segmentNodeStore, FileStore fileStore) {
+            this.segmentNodeStore = segmentNodeStore;
+            this.fileStore = fileStore;
+        }
+
+        public FileStore getFileStore() {
+            return fileStore;
+        }
+
+        @Override
+        public SegmentNodeStore getNodeStore() {
+            return segmentNodeStore;
+        }
+    }
 }

@@ -22,10 +22,6 @@ import static org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils.asClosea
 import java.io.File;
 import java.io.IOException;
 
-import org.apache.jackrabbit.oak.segment.RecordType;
-import org.apache.jackrabbit.oak.segment.Segment;
-import org.apache.jackrabbit.oak.segment.SegmentId;
-import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
@@ -33,7 +29,7 @@ import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.segment.file.ReadOnlyFileStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
-import org.apache.jackrabbit.oak.spi.state.ProxyNodeStore;
+import org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils.NodeStoreWithFileStore;
 
 import com.google.common.io.Closer;
 
@@ -102,28 +98,7 @@ public class SegmentTarFactory implements NodeStoreFactory {
         } catch (InvalidFileStoreVersionException e) {
             throw new IOException(e);
         }
-        try {
-            for (SegmentId id : fs.getSegmentIds()) {
-                if (!id.isDataSegmentId()) {
-                    continue;
-                }
-                id.getSegment().forEachRecord(new Segment.RecordConsumer() {
-                    @Override
-                    public void consume(int number, RecordType type, int offset) {
-                        // FIXME the consumer should allow to stop processing
-                        // see java.nio.file.FileVisitor
-                        if (type == RecordType.BLOB_ID) {
-                            throw new ExternalBlobFound();
-                        }
-                    }
-                });
-            }
-            return false;
-        } catch (ExternalBlobFound e) {
-            return true;
-        } finally {
-            fs.close();
-        }
+        return FileStoreUtils.hasExternalBlobReferences(fs);
     }
 
     public File getRepositoryDir() {
@@ -133,29 +108,5 @@ public class SegmentTarFactory implements NodeStoreFactory {
     @Override
     public String toString() {
         return String.format("SegmentTarNodeStore[%s]", dir);
-    }
-
-    private static class ExternalBlobFound extends RuntimeException {
-    }
-
-    public static class NodeStoreWithFileStore extends ProxyNodeStore {
-
-        private final SegmentNodeStore segmentNodeStore;
-
-        private final FileStore fileStore;
-
-        public NodeStoreWithFileStore(SegmentNodeStore segmentNodeStore, FileStore fileStore) {
-            this.segmentNodeStore = segmentNodeStore;
-            this.fileStore = fileStore;
-        }
-
-        public FileStore getFileStore() {
-            return fileStore;
-        }
-
-        @Override
-        public SegmentNodeStore getNodeStore() {
-            return segmentNodeStore;
-        }
     }
 }

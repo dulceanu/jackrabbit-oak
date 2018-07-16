@@ -138,22 +138,6 @@ public enum StoreType {
             return true;
         }
     },
-    SEGMENT_TAR {
-        @Override
-        public boolean matches(String argument) {
-            return true;
-        }
-
-        @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
-            return new StoreFactory(new SegmentTarFactory(paths[0], migrationOptions.isDisableMmap(), direction == MigrationDirection.SRC));
-        }
-
-        @Override
-        public boolean isSupportLongNames() {
-            return true;
-        }
-    },
     SEGMENT_AZURE {
         @Override
         public boolean matches(String argument) {
@@ -172,6 +156,22 @@ public enum StoreType {
             String dir = uri.substring(lastSlashPos + 1);
             
             return new StoreFactory(new SegmentAzureFactory(accountName, storageUri, dir, direction == MigrationDirection.SRC));
+        }
+
+        @Override
+        public boolean isSupportLongNames() {
+            return true;
+        }
+    },
+    SEGMENT_TAR {
+        @Override
+        public boolean matches(String argument) {
+            return true;
+        }
+
+        @Override
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
+            return new StoreFactory(new SegmentTarFactory(paths[0], migrationOptions.isDisableMmap(), direction == MigrationDirection.SRC));
         }
 
         @Override

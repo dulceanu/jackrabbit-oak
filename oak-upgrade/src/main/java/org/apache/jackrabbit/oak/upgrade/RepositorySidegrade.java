@@ -16,6 +16,24 @@
  */
 package org.apache.jackrabbit.oak.upgrade;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.collect.ImmutableSet.copyOf;
+import static com.google.common.collect.ImmutableSet.of;
+import static com.google.common.collect.Sets.union;
+import static org.apache.jackrabbit.JcrConstants.JCR_PRIMARYTYPE;
+import static org.apache.jackrabbit.JcrConstants.JCR_SYSTEM;
+import static org.apache.jackrabbit.oak.plugins.migration.NodeStateCopier.copyProperties;
+import static org.apache.jackrabbit.oak.spi.security.authorization.permission.PermissionConstants.NT_REP_PERMISSION_STORE;
+import static org.apache.jackrabbit.oak.spi.security.authorization.permission.PermissionConstants.REP_PERMISSION_STORE;
+import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.DEFAULT_EXCLUDE_PATHS;
+import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.DEFAULT_INCLUDE_PATHS;
+import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.DEFAULT_MERGE_PATHS;
+import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.calculateEffectiveIncludePaths;
+import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.createIndexEditorProvider;
+import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.createTypeEditorProvider;
+import static org.apache.jackrabbit.oak.upgrade.version.VersionCopier.copyVersionStorage;
+import static org.apache.jackrabbit.oak.upgrade.version.VersionHistoryUtil.getVersionStorage;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -27,7 +45,6 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.jcr.RepositoryException;
 
-import com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
 import org.apache.jackrabbit.JcrConstants;
 import org.apache.jackrabbit.oak.api.CommitFailedException;
@@ -35,7 +52,6 @@ import org.apache.jackrabbit.oak.api.PropertyState;
 import org.apache.jackrabbit.oak.api.Type;
 import org.apache.jackrabbit.oak.commons.PathUtils;
 import org.apache.jackrabbit.oak.plugins.migration.FilteringNodeState;
-import org.apache.jackrabbit.oak.upgrade.nodestate.NameFilteringNodeState;
 import org.apache.jackrabbit.oak.plugins.migration.NodeStateCopier;
 import org.apache.jackrabbit.oak.plugins.migration.report.LoggingReporter;
 import org.apache.jackrabbit.oak.plugins.migration.report.ReportingNodeState;
@@ -54,31 +70,16 @@ import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
 import org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.LoggingCompositeHook;
 import org.apache.jackrabbit.oak.upgrade.checkpoint.CheckpointRetriever;
-import org.apache.jackrabbit.oak.upgrade.cli.node.SegmentTarFactory;
+import org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils;
 import org.apache.jackrabbit.oak.upgrade.nodestate.MetadataExposingNodeState;
+import org.apache.jackrabbit.oak.upgrade.nodestate.NameFilteringNodeState;
 import org.apache.jackrabbit.oak.upgrade.version.VersionCopyConfiguration;
 import org.apache.jackrabbit.oak.upgrade.version.VersionHistoryUtil;
 import org.apache.jackrabbit.oak.upgrade.version.VersionableEditor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.collect.ImmutableSet.copyOf;
-import static com.google.common.collect.ImmutableSet.of;
-import static com.google.common.collect.Sets.union;
-import static org.apache.jackrabbit.JcrConstants.JCR_PRIMARYTYPE;
-import static org.apache.jackrabbit.JcrConstants.JCR_SYSTEM;
-import static org.apache.jackrabbit.oak.plugins.migration.NodeStateCopier.copyProperties;
-import static org.apache.jackrabbit.oak.spi.security.authorization.permission.PermissionConstants.NT_REP_PERMISSION_STORE;
-import static org.apache.jackrabbit.oak.spi.security.authorization.permission.PermissionConstants.REP_PERMISSION_STORE;
-import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.DEFAULT_EXCLUDE_PATHS;
-import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.DEFAULT_INCLUDE_PATHS;
-import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.DEFAULT_MERGE_PATHS;
-import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.calculateEffectiveIncludePaths;
-import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.createIndexEditorProvider;
-import static org.apache.jackrabbit.oak.upgrade.RepositoryUpgrade.createTypeEditorProvider;
-import static org.apache.jackrabbit.oak.upgrade.version.VersionCopier.copyVersionStorage;
-import static org.apache.jackrabbit.oak.upgrade.version.VersionHistoryUtil.getVersionStorage;
+import com.google.common.collect.Lists;
 
 public class RepositorySidegrade {
 
@@ -176,8 +177,8 @@ public class RepositorySidegrade {
         this.target = target;
 
         FileStore fs = null;
-        if (target instanceof SegmentTarFactory.NodeStoreWithFileStore) {
-            fs = ((SegmentTarFactory.NodeStoreWithFileStore) target).getFileStore();
+        if (target instanceof FileStoreUtils.NodeStoreWithFileStore) {
+            fs = ((FileStoreUtils.NodeStoreWithFileStore) target).getFileStore();
         }
         this.targetFileStore = fs;
     }

@@ -30,7 +30,7 @@ import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.segment.file.ReadOnlyFileStore;
 import org.apache.jackrabbit.oak.spi.blob.BlobStore;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
-import org.apache.jackrabbit.oak.upgrade.cli.node.SegmentTarFactory.NodeStoreWithFileStore;
+import org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils.NodeStoreWithFileStore;
 
 import com.google.common.io.Closer;
 import com.google.common.io.Files;
@@ -62,7 +62,10 @@ public class SegmentAzureFactory implements NodeStoreFactory {
             throw new IllegalStateException(e);
         }
 
-        FileStoreBuilder builder = FileStoreBuilder.fileStoreBuilder(Files.createTempDir()).withCustomPersistence(azPersistence);
+        FileStoreBuilder builder = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
+                .withCustomPersistence(azPersistence)
+                .withMemoryMapping(false);
+        
         if (blobStore != null) {
             builder.withBlobStore(blobStore);
         }
@@ -96,7 +99,29 @@ public class SegmentAzureFactory implements NodeStoreFactory {
 
     @Override
     public boolean hasExternalBlobReferences() throws IOException {
-        // TODO Auto-generated method stub
-        return false;
+        AzurePersistence azPersistence = null;
+        try {
+            azPersistence = createAzurePersistence();
+        } catch (StorageException | URISyntaxException e) {
+            throw new IllegalStateException(e);
+        }
+
+        FileStoreBuilder builder = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
+                .withCustomPersistence(azPersistence)
+                .withMemoryMapping(false);
+        
+        ReadOnlyFileStore fs;
+        try {
+            fs = builder.buildReadOnly();
+        } catch (InvalidFileStoreVersionException e) {
+            throw new IOException(e);
+        }
+        
+        return FileStoreUtils.hasExternalBlobReferences(fs);
+    }
+    
+    @Override
+    public String toString() {
+        return String.format("AzureSegmentNodeStore[%s]", dir);
     }
 }

@@ -18,9 +18,11 @@
  */
 package org.apache.jackrabbit.oak.upgrade.checkpoint;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
+import java.util.Collections;
+import java.util.List;
+
+import javax.annotation.Nullable;
+
 import org.apache.jackrabbit.oak.plugins.document.DocumentCheckpointRetriever;
 import org.apache.jackrabbit.oak.plugins.document.DocumentNodeStore;
 import org.apache.jackrabbit.oak.segment.CheckpointAccessor;
@@ -28,11 +30,11 @@ import org.apache.jackrabbit.oak.segment.SegmentNodeStore;
 import org.apache.jackrabbit.oak.spi.state.ChildNodeEntry;
 import org.apache.jackrabbit.oak.spi.state.NodeState;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
-import org.apache.jackrabbit.oak.upgrade.cli.node.SegmentTarFactory;
+import org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils;
 
-import javax.annotation.Nullable;
-import java.util.Collections;
-import java.util.List;
+import com.google.common.base.Function;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 public final class CheckpointRetriever {
 
@@ -79,8 +81,8 @@ public final class CheckpointRetriever {
             result = getCheckpoints(org.apache.jackrabbit.oak.plugins.segment.CheckpointAccessor.getCheckpointsRoot((org.apache.jackrabbit.oak.plugins.segment.SegmentNodeStore) nodeStore));
         } else if (nodeStore instanceof DocumentNodeStore) {
             result = DocumentCheckpointRetriever.getCheckpoints((DocumentNodeStore) nodeStore);
-        } else if (nodeStore instanceof SegmentTarFactory.NodeStoreWithFileStore) {
-            result = getCheckpoints(CheckpointAccessor.getCheckpointsRoot(((SegmentTarFactory.NodeStoreWithFileStore) nodeStore).getNodeStore()));
+        } else if (nodeStore instanceof FileStoreUtils.NodeStoreWithFileStore) {
+            result = getCheckpoints(CheckpointAccessor.getCheckpointsRoot(((FileStoreUtils.NodeStoreWithFileStore) nodeStore).getNodeStore()));
         } else {
             return null;
         }
