@@ -19,8 +19,8 @@ package org.apache.jackrabbit.oak.upgrade.cli.parser;
 import static org.apache.commons.lang.StringUtils.removeStart;
 import static org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory.isJcr2Repository;
 import static org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory.isRepositoryXml;
-import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_OLD_PREFIX;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_AZURE_PREFIX;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_OLD_PREFIX;
 
 import org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.JdbcFactory;
@@ -39,7 +39,8 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
             throw new UnsupportedOperationException();
         }
 
@@ -55,7 +56,8 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
             throw new UnsupportedOperationException();
         }
 
@@ -71,7 +73,8 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
             return new StoreFactory(new Jackrabbit2Factory(paths[0], paths[1]));
         }
 
@@ -87,7 +90,8 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
             String username, password;
             if (direction == MigrationDirection.SRC) {
                 username = migrationOptions.getSrcUser();
@@ -96,8 +100,8 @@ public enum StoreType {
                 username = migrationOptions.getDstUser();
                 password = migrationOptions.getDstPassword();
             }
-            return new StoreFactory(
-                    new JdbcFactory(paths[0], migrationOptions.getCacheSizeInMB(), username, password, direction == MigrationDirection.SRC));
+            return new StoreFactory(new JdbcFactory(paths[0], migrationOptions.getCacheSizeInMB(), username, password,
+                    direction == MigrationDirection.SRC));
         }
 
         @Override
@@ -112,8 +116,10 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
-            return new StoreFactory(new MongoFactory(paths[0], migrationOptions.getCacheSizeInMB(), direction == MigrationDirection.SRC));
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
+            return new StoreFactory(new MongoFactory(paths[0], migrationOptions.getCacheSizeInMB(),
+                    direction == MigrationDirection.SRC));
         }
 
         @Override
@@ -128,9 +134,11 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
             String path = removeStart(paths[0], SEGMENT_OLD_PREFIX);
-            return new StoreFactory(new SegmentFactory(path, migrationOptions.isDisableMmap(), direction == MigrationDirection.SRC));
+            return new StoreFactory(
+                    new SegmentFactory(path, migrationOptions.isDisableMmap(), direction == MigrationDirection.SRC));
         }
 
         @Override
@@ -145,17 +153,35 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
-            String uri = removeStart(paths[0], SEGMENT_AZURE_PREFIX);
-            int lastSlashPos = uri.lastIndexOf('/');
-            int doubleSlashPos = uri.indexOf("//");
-            int firstDotPos = uri.indexOf(".");
-            
-            String accountName = uri.substring(doubleSlashPos + 2, firstDotPos);
-            String storageUri = uri.substring(0, lastSlashPos);
-            String dir = uri.substring(lastSlashPos + 1);
-            
-            return new StoreFactory(new SegmentAzureFactory(accountName, storageUri, dir, direction == MigrationDirection.SRC));
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
+            if (paths[0].contains("DefaultEndpointsProtocol")) { 
+                paths[0] = removeStart(paths[0], SEGMENT_AZURE_PREFIX);
+                int containerNameIndex = paths[0].indexOf("ContainerName=");
+                int dirIndex = paths[0].indexOf("Directory=");
+                
+                String connectionString = paths[0].substring(0, containerNameIndex);
+                String containerName = paths[0].substring(containerNameIndex + "ContainerName=".length(), dirIndex - 1);
+                String dir = paths[0].substring(dirIndex + "Directory=".length());
+
+                // azure configuration specified through container-name and connection-string
+                return new StoreFactory(new SegmentAzureFactory(dir, direction == MigrationDirection.SRC)
+                        .withConnectionStringAndContainerName(connectionString, containerName));
+            } else {
+                // azure configuration specified through URI
+                String uri = removeStart(paths[0], SEGMENT_AZURE_PREFIX);
+
+                int lastSlashPos = uri.lastIndexOf('/');
+                int doubleSlashPos = uri.indexOf("//");
+                int firstDotPos = uri.indexOf(".");
+
+                String accountName = uri.substring(doubleSlashPos + 2, firstDotPos);
+                String storageUri = uri.substring(0, lastSlashPos);
+                String dir = uri.substring(lastSlashPos + 1);
+
+                return new StoreFactory(new SegmentAzureFactory(dir, direction == MigrationDirection.SRC)
+                        .withAccountNameAndUri(accountName, storageUri));
+            }
         }
 
         @Override
@@ -170,8 +196,10 @@ public enum StoreType {
         }
 
         @Override
-        public StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions) {
-            return new StoreFactory(new SegmentTarFactory(paths[0], migrationOptions.isDisableMmap(), direction == MigrationDirection.SRC));
+        public StoreFactory createFactory(String[] paths, MigrationDirection direction,
+                MigrationOptions migrationOptions) {
+            return new StoreFactory(new SegmentTarFactory(paths[0], migrationOptions.isDisableMmap(),
+                    direction == MigrationDirection.SRC));
         }
 
         @Override
@@ -191,7 +219,8 @@ public enum StoreType {
 
     public abstract boolean matches(String argument);
 
-    public abstract StoreFactory createFactory(String[] paths, MigrationDirection direction, MigrationOptions migrationOptions);
+    public abstract StoreFactory createFactory(String[] paths, MigrationDirection direction,
+            MigrationOptions migrationOptions);
 
     public abstract boolean isSupportLongNames();
 

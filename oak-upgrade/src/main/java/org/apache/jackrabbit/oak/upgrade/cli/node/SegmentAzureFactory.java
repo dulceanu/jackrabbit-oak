@@ -21,6 +21,7 @@ import static org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils.asClosea
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.InvalidKeyException;
 
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
@@ -34,6 +35,7 @@ import org.apache.jackrabbit.oak.upgrade.cli.node.FileStoreUtils.NodeStoreWithFi
 
 import com.google.common.io.Closer;
 import com.google.common.io.Files;
+import com.microsoft.azure.storage.CloudStorageAccount;
 import com.microsoft.azure.storage.StorageCredentials;
 import com.microsoft.azure.storage.StorageCredentialsAccountAndKey;
 import com.microsoft.azure.storage.StorageException;
@@ -41,35 +43,50 @@ import com.microsoft.azure.storage.StorageUri;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 
 public class SegmentAzureFactory implements NodeStoreFactory {
-    private final String accountName;
-    private final String uri;
+    private String accountName;
+    private String uri;
+
+    private String connectionString;
+    private String containerName;
+
     private final String dir;
     private final boolean readOnly;
 
-    public SegmentAzureFactory(String accountName, String uri, String dir, boolean readOnly) {
-        this.accountName = accountName;
-        this.uri = uri;
+    public SegmentAzureFactory(String dir, boolean readOnly) {
         this.dir = dir;
         this.readOnly = readOnly;
     }
+    
+    public SegmentAzureFactory withAccountNameAndUri(String accountName, String uri) {
+        this.accountName = accountName;
+        this.uri = uri;
+        
+        return this;
+    }
+    
+    public SegmentAzureFactory withConnectionStringAndContainerName(String connectionString, String containerName) {
+        this.connectionString = connectionString;
+        this.containerName = containerName;
+        
+        return this;
+    } 
 
     @Override
     public NodeStore create(BlobStore blobStore, Closer closer) throws IOException {
         AzurePersistence azPersistence = null;
         try {
             azPersistence = createAzurePersistence();
-        } catch (StorageException | URISyntaxException e) {
+        } catch (StorageException | URISyntaxException | InvalidKeyException e) {
             throw new IllegalStateException(e);
         }
 
         FileStoreBuilder builder = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
-                .withCustomPersistence(azPersistence)
-                .withMemoryMapping(false);
-        
+                .withCustomPersistence(azPersistence).withMemoryMapping(false);
+
         if (blobStore != null) {
             builder.withBlobStore(blobStore);
         }
-        
+
         try {
             if (readOnly) {
                 final ReadOnlyFileStore fs;
@@ -87,13 +104,29 @@ public class SegmentAzureFactory implements NodeStoreFactory {
         }
     }
 
-    private AzurePersistence createAzurePersistence() throws StorageException, URISyntaxException {
-        String key = System.getenv("AZURE_SECRET_KEY");
-        StorageCredentials credentials = new StorageCredentialsAccountAndKey(accountName, key);
-        StorageUri storageUri = new StorageUri(new URI(uri));
-        CloudBlobContainer cloudBlobContainer = new CloudBlobContainer(storageUri, credentials);
+    private AzurePersistence createAzurePersistence() throws StorageException, URISyntaxException, InvalidKeyException {
+        AzurePersistence azPersistence = null;
         
-        AzurePersistence azPersistence = new AzurePersistence(cloudBlobContainer.getDirectoryReference(dir));
+        if (accountName != null && uri != null) {
+            String key = System.getenv("AZURE_SECRET_KEY");
+            StorageCredentials credentials = new StorageCredentialsAccountAndKey(accountName, key);
+            StorageUri storageUri = new StorageUri(new URI(uri));
+            CloudBlobContainer cloudBlobContainer = new CloudBlobContainer(storageUri, credentials);
+
+            azPersistence = new AzurePersistence(cloudBlobContainer.getDirectoryReference(dir));
+            return azPersistence;
+        } else if (connectionString != null && containerName != null) {
+            CloudStorageAccount cloud = CloudStorageAccount.parse(connectionString.toString());
+            CloudBlobContainer container = cloud.createCloudBlobClient().getContainerReference(containerName);
+            container.createIfNotExists();
+            
+            azPersistence = new AzurePersistence(container.getDirectoryReference(dir));
+        } 
+        
+        if (azPersistence == null) {
+            throw new IllegalArgumentException("Could not connect to Azure storage. Too few connection parameters specified!");
+        }
+        
         return azPersistence;
     }
 
@@ -102,24 +135,23 @@ public class SegmentAzureFactory implements NodeStoreFactory {
         AzurePersistence azPersistence = null;
         try {
             azPersistence = createAzurePersistence();
-        } catch (StorageException | URISyntaxException e) {
+        } catch (StorageException | URISyntaxException | InvalidKeyException e) {
             throw new IllegalStateException(e);
         }
 
         FileStoreBuilder builder = FileStoreBuilder.fileStoreBuilder(Files.createTempDir())
-                .withCustomPersistence(azPersistence)
-                .withMemoryMapping(false);
-        
+                .withCustomPersistence(azPersistence).withMemoryMapping(false);
+
         ReadOnlyFileStore fs;
         try {
             fs = builder.buildReadOnly();
         } catch (InvalidFileStoreVersionException e) {
             throw new IOException(e);
         }
-        
+
         return FileStoreUtils.hasExternalBlobReferences(fs);
     }
-    
+
     @Override
     public String toString() {
         return String.format("AzureSegmentNodeStore[%s]", dir);

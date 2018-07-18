@@ -28,15 +28,14 @@ import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
 import org.apache.jackrabbit.oak.segment.file.InvalidFileStoreVersionException;
 import org.apache.jackrabbit.oak.spi.state.NodeStore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.io.Files;
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 
 public class SegmentAzureNodeStoreContainer implements NodeStoreContainer {
-    private static final Logger LOG = LoggerFactory.getLogger(SegmentAzureNodeStoreContainer.class);
+    private static final String AZURE_ACCOUNT_NAME = "devstoreaccount1";
+    private static final String AZURE_ACCOUNT_KEY = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
 
     private final String dir;
 
@@ -44,8 +43,10 @@ public class SegmentAzureNodeStoreContainer implements NodeStoreContainer {
 
     private final CloudBlobContainer container;
 
+    private final int mappedPort;
+
     private FileStore fs;
-    
+
     public SegmentAzureNodeStoreContainer(AzuriteDockerRule azurite) throws IOException {
         this(azurite, null, null);
     }
@@ -58,11 +59,13 @@ public class SegmentAzureNodeStoreContainer implements NodeStoreContainer {
         this(azurite, blob, null);
     }
 
-    private SegmentAzureNodeStoreContainer(AzuriteDockerRule azurite, BlobStoreContainer blob, String dir) throws IOException {
+    private SegmentAzureNodeStoreContainer(AzuriteDockerRule azurite, BlobStoreContainer blob, String dir)
+            throws IOException {
         this.blob = blob;
         this.dir = dir == null ? "repository" : dir;
         try {
             this.container = azurite.getContainer("oak-test");
+            this.mappedPort = azurite.getMappedPort();
         } catch (InvalidKeyException | URISyntaxException | StorageException e) {
             throw new IOException(e);
         }
@@ -111,14 +114,15 @@ public class SegmentAzureNodeStoreContainer implements NodeStoreContainer {
 
     @Override
     public String getDescription() {
-        String description = "az:";
-        try {
-            description += container.getDirectoryReference(dir).getUri().toString();
-        } catch (URISyntaxException e) {
-            LOG.error("Can't obtain directory reference " + dir + " for container " + container, e);
-        }
+        StringBuilder description = new StringBuilder("az:");
+        description.append("DefaultEndpointsProtocol=https;");
+        description.append("AccountName=").append(AZURE_ACCOUNT_NAME).append(';');
+        description.append("AccountKey=").append(AZURE_ACCOUNT_KEY).append(';');
+        description.append("BlobEndpoint=http://127.0.0.1:").append(mappedPort).append("/devstoreaccount1;");
+        description.append("ContainerName=").append(container.getName()).append(";");
+        description.append("Directory=").append(dir);
 
-        return description;
+        return description.toString();
     }
 
 }

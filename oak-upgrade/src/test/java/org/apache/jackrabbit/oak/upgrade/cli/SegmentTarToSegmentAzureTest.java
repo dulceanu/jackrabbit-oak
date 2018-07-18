@@ -33,9 +33,9 @@ public class SegmentTarToSegmentAzureTest extends AbstractOak2OakTest {
 
     @ClassRule
     public static AzuriteDockerRule azurite = new AzuriteDockerRule();
-    
+
     public SegmentTarToSegmentAzureTest() throws IOException {
-        source = new SegmentTarNodeStoreContainer(); 
+        source = new SegmentTarNodeStoreContainer();
         destination = new SegmentAzureNodeStoreContainer(azurite);
     }
 

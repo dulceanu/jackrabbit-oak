@@ -51,7 +51,7 @@ public class SegmentAzureToSegmentTarTest extends AbstractOak2OakTest {
 
     @Override
     protected String[] getArgs() {
-        return new String[] { source.getDescription(), destination.getDescription(),  };
+        return new String[] { source.getDescription(), destination.getDescription()};
     }
 
     @Override
