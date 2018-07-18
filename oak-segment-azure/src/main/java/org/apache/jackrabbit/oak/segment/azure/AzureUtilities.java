@@ -16,24 +16,28 @@
  */
 package org.apache.jackrabbit.oak.segment.azure;
 
-import com.microsoft.azure.storage.StorageException;
-import com.microsoft.azure.storage.blob.BlobListingDetails;
-import com.microsoft.azure.storage.blob.CloudBlob;
-import com.microsoft.azure.storage.blob.CloudBlobDirectory;
-
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
 import java.util.EnumSet;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.microsoft.azure.storage.StorageException;
+import com.microsoft.azure.storage.blob.BlobListingDetails;
+import com.microsoft.azure.storage.blob.CloudBlob;
+import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 
 public final class AzureUtilities {
 
     public static String SEGMENT_FILE_NAME_PATTERN = "^([0-9a-f]{4})\\.([0-9a-f-]+)$";
+    
+    private static final Logger log = LoggerFactory.getLogger(AzureUtilities.class);
 
     private AzureUtilities() {
     }
@@ -56,9 +60,9 @@ public final class AzureUtilities {
 
     public static Stream<CloudBlob> getBlobs(CloudBlobDirectory directory) throws IOException {
         try {
-            return StreamSupport.stream(directory.listBlobs(null, false, EnumSet.of(BlobListingDetails.METADATA), null, null).spliterator(), false)
-                    .filter(i -> i instanceof CloudBlob)
-                    .map(i -> (CloudBlob) i);
+            return StreamSupport.stream(
+                    directory.listBlobs(null, false, EnumSet.of(BlobListingDetails.METADATA), null, null).spliterator(),
+                    false).filter(i -> i instanceof CloudBlob).map(i -> (CloudBlob) i);
         } catch (StorageException | URISyntaxException e) {
             throw new IOException(e);
         }
@@ -74,5 +78,16 @@ public final class AzureUtilities {
         } catch (StorageException e) {
             throw new IOException(e);
         }
+    }
+
+    public static void deleteAllEntries(CloudBlobDirectory directory) throws IOException {
+        Stream<CloudBlob> blobs = getBlobs(directory);
+        blobs.forEach(b -> {
+            try {
+                b.deleteIfExists();
+            } catch (StorageException e) {
+                log.error("Can't delete blob {}", b.getUri().getPath(), e);
+            }
+        });
     }
 }

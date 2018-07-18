@@ -18,9 +18,11 @@ package org.apache.jackrabbit.oak.upgrade.cli.container;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.security.InvalidKeyException;
 
 import org.apache.jackrabbit.oak.segment.SegmentNodeStoreBuilders;
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
+import org.apache.jackrabbit.oak.segment.azure.AzureUtilities;
 import org.apache.jackrabbit.oak.segment.azure.AzuriteDockerRule;
 import org.apache.jackrabbit.oak.segment.file.FileStore;
 import org.apache.jackrabbit.oak.segment.file.FileStoreBuilder;
@@ -30,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.io.Files;
+import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 
 public class SegmentAzureNodeStoreContainer implements NodeStoreContainer {
@@ -42,25 +45,27 @@ public class SegmentAzureNodeStoreContainer implements NodeStoreContainer {
     private final CloudBlobContainer container;
 
     private FileStore fs;
-
-    public static AzuriteDockerRule azurite = new AzuriteDockerRule();
-
-    public SegmentAzureNodeStoreContainer() throws Exception {
-        this(null, null);
+    
+    public SegmentAzureNodeStoreContainer(AzuriteDockerRule azurite) throws IOException {
+        this(azurite, null, null);
     }
 
-    public SegmentAzureNodeStoreContainer(String dir) throws Exception {
-        this(null, dir);
+    public SegmentAzureNodeStoreContainer(AzuriteDockerRule azurite, String dir) throws IOException {
+        this(azurite, null, dir);
     }
 
-    public SegmentAzureNodeStoreContainer(BlobStoreContainer blob) throws Exception {
-        this(blob, null);
+    public SegmentAzureNodeStoreContainer(AzuriteDockerRule azurite, BlobStoreContainer blob) throws IOException {
+        this(azurite, blob, null);
     }
 
-    private SegmentAzureNodeStoreContainer(BlobStoreContainer blob, String dir) throws Exception {
+    private SegmentAzureNodeStoreContainer(AzuriteDockerRule azurite, BlobStoreContainer blob, String dir) throws IOException {
         this.blob = blob;
         this.dir = dir == null ? "repository" : dir;
-        this.container = azurite.getContainer("oak-test");
+        try {
+            this.container = azurite.getContainer("oak-test");
+        } catch (InvalidKeyException | URISyntaxException | StorageException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
@@ -97,13 +102,16 @@ public class SegmentAzureNodeStoreContainer implements NodeStoreContainer {
 
     @Override
     public void clean() throws IOException {
-        // TODO Auto-generated method stub
-
+        try {
+            AzureUtilities.deleteAllEntries(container.getDirectoryReference(dir));
+        } catch (URISyntaxException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public String getDescription() {
-        String description = "AzureSegmentStore@";
+        String description = "az:";
         try {
             description += container.getDirectoryReference(dir).getUri().toString();
         } catch (URISyntaxException e) {

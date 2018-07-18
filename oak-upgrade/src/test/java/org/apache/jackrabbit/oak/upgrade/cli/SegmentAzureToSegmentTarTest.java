@@ -17,6 +17,45 @@
 
 package org.apache.jackrabbit.oak.upgrade.cli;
 
-public class SegmentAzureToSegmentTarTest {
+import java.io.IOException;
 
+import org.apache.jackrabbit.oak.segment.azure.AzuriteDockerRule;
+import org.apache.jackrabbit.oak.upgrade.cli.container.NodeStoreContainer;
+import org.apache.jackrabbit.oak.upgrade.cli.container.SegmentAzureNodeStoreContainer;
+import org.apache.jackrabbit.oak.upgrade.cli.container.SegmentTarNodeStoreContainer;
+import org.junit.ClassRule;
+
+public class SegmentAzureToSegmentTarTest extends AbstractOak2OakTest {
+
+    private final NodeStoreContainer source;
+
+    private final NodeStoreContainer destination;
+    
+    @ClassRule
+    public static AzuriteDockerRule azurite = new AzuriteDockerRule();
+
+    public SegmentAzureToSegmentTarTest() throws IOException {
+        source = new SegmentAzureNodeStoreContainer(azurite);
+        destination = new SegmentTarNodeStoreContainer();
+    }
+    
+    @Override
+    protected NodeStoreContainer getSourceContainer() {
+        return source;
+    }
+
+    @Override
+    protected NodeStoreContainer getDestinationContainer() {
+        return destination;
+    }
+
+    @Override
+    protected String[] getArgs() {
+        return new String[] { source.getDescription(), destination.getDescription(),  };
+    }
+
+    @Override
+    protected boolean supportsCheckpointMigration() {
+        return true;
+    }
 }
