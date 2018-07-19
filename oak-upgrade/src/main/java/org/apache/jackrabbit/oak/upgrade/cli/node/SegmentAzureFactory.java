@@ -43,34 +43,61 @@ import com.microsoft.azure.storage.StorageUri;
 import com.microsoft.azure.storage.blob.CloudBlobContainer;
 
 public class SegmentAzureFactory implements NodeStoreFactory {
-    private String accountName;
-    private String uri;
-
-    private String connectionString;
-    private String containerName;
-
+    private final String accountName;
+    private final String uri;
+    private final String connectionString;
+    private final String containerName;
     private final String dir;
     private final boolean readOnly;
 
-    public SegmentAzureFactory(String dir, boolean readOnly) {
-        this.dir = dir;
-        this.readOnly = readOnly;
+    public static class Builder {
+        private final String dir;
+        private final boolean readOnly;
+        
+        private String accountName;
+        private String uri;
+        private String connectionString;
+        private String containerName;
+        
+        public Builder(String dir, boolean readOnly) {
+            this.dir = dir;
+            this.readOnly = readOnly;
+        }
+        
+        public Builder accountName(String accountName) {
+            this.accountName = accountName;
+            return this;
+        }
+        
+        public Builder uri(String uri) {
+            this.uri = uri;
+            return this;
+        }
+        
+        public Builder connectionString(String connectionString) {
+            this.connectionString = connectionString;
+            return this;
+        }
+        
+        public Builder containerName(String containerName) {
+            this.containerName = containerName;
+            return this;
+        }
+        
+        public SegmentAzureFactory build() {
+            return new SegmentAzureFactory(this);
+        }
     }
     
-    public SegmentAzureFactory withAccountNameAndUri(String accountName, String uri) {
-        this.accountName = accountName;
-        this.uri = uri;
-        
-        return this;
+    public SegmentAzureFactory(Builder builder) {
+        this.accountName = builder.accountName;
+        this.uri = builder.uri;
+        this.connectionString = builder.connectionString;
+        this.containerName = builder.containerName;
+        this.dir = builder.dir;
+        this.readOnly = builder.readOnly;
     }
     
-    public SegmentAzureFactory withConnectionStringAndContainerName(String connectionString, String containerName) {
-        this.connectionString = connectionString;
-        this.containerName = containerName;
-        
-        return this;
-    } 
-
     @Override
     public NodeStore create(BlobStore blobStore, Closer closer) throws IOException {
         AzurePersistence azPersistence = null;
@@ -114,7 +141,6 @@ public class SegmentAzureFactory implements NodeStoreFactory {
             CloudBlobContainer cloudBlobContainer = new CloudBlobContainer(storageUri, credentials);
 
             azPersistence = new AzurePersistence(cloudBlobContainer.getDirectoryReference(dir));
-            return azPersistence;
         } else if (connectionString != null && containerName != null) {
             CloudStorageAccount cloud = CloudStorageAccount.parse(connectionString.toString());
             CloudBlobContainer container = cloud.createCloudBlobClient().getContainerReference(containerName);

@@ -19,8 +19,19 @@ package org.apache.jackrabbit.oak.upgrade.cli.parser;
 import static org.apache.commons.lang.StringUtils.removeStart;
 import static org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory.isJcr2Repository;
 import static org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory.isRepositoryXml;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.isCustomAzureConnectionString;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.parseAzureConfigurationFromCustomConnection;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.parseAzureConfigurationFromUri;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_AZURE_PREFIX;
 import static org.apache.jackrabbit.oak.upgrade.cli.parser.StoreArguments.SEGMENT_OLD_PREFIX;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.KEY_ACCOUNT_NAME;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.KEY_STORAGE_URI;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.KEY_CONNECTION_STRING;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.KEY_CONTAINER_NAME;
+import static org.apache.jackrabbit.oak.upgrade.cli.parser.AzureParserUtils.KEY_DIR;
+
+
+import java.util.Map;
 
 import org.apache.jackrabbit.oak.upgrade.cli.node.Jackrabbit2Factory;
 import org.apache.jackrabbit.oak.upgrade.cli.node.JdbcFactory;
@@ -155,32 +166,25 @@ public enum StoreType {
         @Override
         public StoreFactory createFactory(String[] paths, MigrationDirection direction,
                 MigrationOptions migrationOptions) {
-            if (paths[0].contains("DefaultEndpointsProtocol")) { 
-                paths[0] = removeStart(paths[0], SEGMENT_AZURE_PREFIX);
-                int containerNameIndex = paths[0].indexOf("ContainerName=");
-                int dirIndex = paths[0].indexOf("Directory=");
-                
-                String connectionString = paths[0].substring(0, containerNameIndex);
-                String containerName = paths[0].substring(containerNameIndex + "ContainerName=".length(), dirIndex - 1);
-                String dir = paths[0].substring(dirIndex + "Directory=".length());
-
-                // azure configuration specified through container-name and connection-string
-                return new StoreFactory(new SegmentAzureFactory(dir, direction == MigrationDirection.SRC)
-                        .withConnectionStringAndContainerName(connectionString, containerName));
+            paths[0] = removeStart(paths[0], SEGMENT_AZURE_PREFIX);
+            
+            if (isCustomAzureConnectionString(paths[0])) { 
+                // azure configuration specified through connection string
+                Map<String, String> config = parseAzureConfigurationFromCustomConnection(paths[0]);
+                return new StoreFactory(new SegmentAzureFactory.Builder(config.get(KEY_DIR), direction == MigrationDirection.SRC)
+                        .connectionString(config.get(KEY_CONNECTION_STRING))
+                        .containerName(config.get(KEY_CONTAINER_NAME))
+                        .build()
+                );
             } else {
                 // azure configuration specified through URI
-                String uri = removeStart(paths[0], SEGMENT_AZURE_PREFIX);
+                Map<String, String> config = parseAzureConfigurationFromUri(paths[0]);
 
-                int lastSlashPos = uri.lastIndexOf('/');
-                int doubleSlashPos = uri.indexOf("//");
-                int firstDotPos = uri.indexOf(".");
-
-                String accountName = uri.substring(doubleSlashPos + 2, firstDotPos);
-                String storageUri = uri.substring(0, lastSlashPos);
-                String dir = uri.substring(lastSlashPos + 1);
-
-                return new StoreFactory(new SegmentAzureFactory(dir, direction == MigrationDirection.SRC)
-                        .withAccountNameAndUri(accountName, storageUri));
+                return new StoreFactory(new SegmentAzureFactory.Builder(config.get(KEY_DIR), direction == MigrationDirection.SRC)
+                        .accountName(config.get(KEY_ACCOUNT_NAME))
+                        .uri(config.get(KEY_STORAGE_URI))
+                        .build()
+                );
             }
         }
 
