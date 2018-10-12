@@ -64,34 +64,34 @@ public class ReadOnlyRevisions implements Revisions, Closeable {
 
     /**
      * Bind this instance to a store.
-     * 
+     *
      * @param store store to bind to
      * @param idProvider  {@code SegmentIdProvider} of the {@code store}
      * @throws IOException
      */
     synchronized void bind(@Nonnull SegmentStore store, @Nonnull SegmentIdProvider idProvider)
     throws IOException {
-        if (head.get() != null) {
-            return;
-        }
-        RecordId persistedId = findPersistedRecordId(store, idProvider, new File(directory, JOURNAL_FILE_NAME));
-        if (persistedId == null) {
-            throw new IllegalStateException("Cannot start readonly store from empty journal");
-        }
-        head.set(persistedId);
+//        if (head.get() != null) {
+//            return;
+//        }
+//        RecordId persistedId = findPersistedRecordId(store, idProvider, new File(directory, JOURNAL_FILE_NAME));
+//        if (persistedId == null) {
+//            throw new IllegalStateException("Cannot start readonly store from empty journal");
+//        }
+//        head.set(persistedId);
     }
 
     private void checkBound() {
-        checkState(head.get() != null, "Revisions not bound to a store");
+//        checkState(head.get() != null, "Revisions not bound to a store");
     }
 
-    @Nonnull
+//    @Nonnull
     @Override
     public RecordId getHead() {
         checkBound();
         return head.get();
     }
-    
+
     @Nonnull
     @Override
     public RecordId getPersistedHead() {
@@ -114,7 +114,7 @@ public class ReadOnlyRevisions implements Revisions, Closeable {
 
     /**
      * Close the underlying journal file.
-     * 
+     *
      * @throws IOException
      */
     @Override

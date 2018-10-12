@@ -57,5 +57,6 @@ public final class AvailableModes {
             .put(IndexCommand.NAME, new IndexCommand())
             .put(NodeStateExportCommand.NAME, new NodeStateExportCommand())
             .put("server", new ServerCommand())
+            .put("tar-recover-journal", new TarRecoverJournalCommand())
             .build());
 }

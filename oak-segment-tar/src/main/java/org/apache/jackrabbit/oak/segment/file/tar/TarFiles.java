@@ -26,12 +26,20 @@ import static com.google.common.collect.Sets.newHashSet;
 import static java.util.Collections.emptySet;
 import static org.apache.commons.io.FileUtils.listFiles;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -49,11 +57,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.annotation.Nonnull;
-
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class TarFiles implements Closeable {
 
@@ -690,8 +693,22 @@ public class TarFiles implements Closeable {
             lock.readLock().unlock();
         }
 
-        List<UUID> ids = new ArrayList<>();
+        List<TarReader> sortedReaders = new ArrayList<TarReader>();
         for (TarReader reader : iterable(head)) {
+                sortedReaders.add(reader);
+        }
+
+        Collections.sort(sortedReaders, new Comparator<TarReader>() {
+
+            @Override
+            public int compare(TarReader o1, TarReader o2) {
+                return -o1.toString().compareTo(o2.toString());
+            }
+
+        });
+
+        List<UUID> ids = new ArrayList<>();
+        for (TarReader reader : sortedReaders) {
             ids.addAll(reader.getUUIDs());
         }
         return ids;

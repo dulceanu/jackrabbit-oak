@@ -75,7 +75,7 @@ public class SegmentNodeState extends Record implements NodeState {
 
     private volatile Template template = null;
 
-    SegmentNodeState(
+    public SegmentNodeState(
             @Nonnull SegmentReader reader,
             @Nonnull Supplier<SegmentWriter> writer,
             @Nullable BlobStore blobStore,
@@ -634,14 +634,14 @@ public class SegmentNodeState extends Record implements NodeState {
     }
 
     //------------------------------------------------------------< Object >--
-    
+
     /**
      * Indicates whether two {@link NodeState} instances are equal to each
      * other. A return value of {@code true} clearly means that the instances
      * are equal, while a return value of {@code false} doesn't necessarily mean
      * the instances are not equal. These "false negatives" are an
      * implementation detail and callers cannot rely on them being stable.
-     * 
+     *
      * @param a
      *            the first {@link NodeState} instance
      * @param b
