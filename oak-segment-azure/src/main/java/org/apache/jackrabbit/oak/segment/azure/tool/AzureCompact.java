@@ -20,28 +20,23 @@ package org.apache.jackrabbit.oak.segment.azure.tool;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.jackrabbit.oak.segment.SegmentCache.DEFAULT_SEGMENT_CACHE_MB;
-import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.createArchiveManager;
-import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.newFileStore;
 import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.newSegmentNodeStorePersistence;
 import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.printableStopwatch;
 
+import com.google.common.base.StandardSystemProperty;
 import com.google.common.base.Stopwatch;
+import com.google.common.io.Closer;
 import com.google.common.io.Files;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.jackrabbit.oak.segment.SegmentCache;
 import org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.SegmentStoreType;
-import org.apache.jackrabbit.oak.segment.file.FileStore;
-import org.apache.jackrabbit.oak.segment.file.JournalReader;
-import org.apache.jackrabbit.oak.segment.spi.persistence.JournalFile;
-import org.apache.jackrabbit.oak.segment.spi.persistence.JournalFileWriter;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.tool.Compact;
 
+import java.io.File;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.util.Collections;
-import java.util.List;
+import java.io.PrintWriter;
 
 /**
  * Perform an offline compaction of an existing Azure Segment Store.
@@ -157,64 +152,63 @@ public class AzureCompact {
     }
 
     public int run() {
-        Stopwatch watch = Stopwatch.createStarted();
-        SegmentNodeStorePersistence persistence = newSegmentNodeStorePersistence(SegmentStoreType.AZURE, path);
-        SegmentArchiveManager archiveManager = createArchiveManager(persistence);
+        PrintWriter outWriter = new PrintWriter(System.out, true);
+        PrintWriter errWriter = new PrintWriter(System.err, true);
+        Closer closer = Closer.create();
 
-        System.out.printf("Compacting %s\n", path);
-        System.out.printf("    before\n");
-        List<String> beforeArchives = Collections.emptyList();
         try {
-            beforeArchives = archiveManager.listArchives();
-        } catch (IOException e) {
-            System.err.println(e);
-        }
+            File localSegmentStoreDir = createTempDir(closer);
 
-        printArchives(System.out, beforeArchives);
-        System.out.printf("    -> compacting\n");
+            System.out.printf("Downloading %s to local repository \n", path);
+            Stopwatch watch = Stopwatch.createStarted();
+            int result = migrateSegmentStore(path, localSegmentStoreDir.getAbsolutePath(), outWriter, errWriter);
 
-        try (FileStore store = newFileStore(persistence, Files.createTempDir(), strictVersionCheck, segmentCacheSize,
-                gcLogInterval)) {
-            if (!store.compactFull()) {
-                System.out.printf("Compaction cancelled after %s.\n", printableStopwatch(watch));
+            if (result != 0) {
                 return 1;
             }
-            System.out.printf("    -> cleaning up\n");
-            store.cleanup();
-            JournalFile journal = persistence.getJournalFile();
-            String head;
-            try (JournalReader journalReader = new JournalReader(journal)) {
-                head = String.format("%s root %s\n", journalReader.next().getRevision(), System.currentTimeMillis());
-            }
 
-            try (JournalFileWriter journalWriter = journal.openJournalWriter()) {
-                System.out.printf("    -> writing new %s: %s\n", journal.getName(), head);
-                journalWriter.truncate();
-                journalWriter.writeLine(head);
-            }
-        } catch (Exception e) {
             watch.stop();
-            e.printStackTrace(System.err);
-            System.out.printf("Compaction failed after %s.\n", printableStopwatch(watch));
-            return 1;
-        }
+            System.out.printf("Download took %s \n", printableStopwatch(watch));
 
-        watch.stop();
-        System.out.printf("    after\n");
-        List<String> afterArchives = Collections.emptyList();
-        try {
-            afterArchives = archiveManager.listArchives();
-        } catch (IOException e) {
-            System.err.println(e);
+            System.out.printf("Compacting nodes locally... \n");
+            int returnCode = Compact.builder().withMmap(false).withSegmentCacheSize(segmentCacheSize)
+                    .withGCLogInterval(gcLogInterval).withOs(StandardSystemProperty.OS_NAME.value())
+                    .withPath(localSegmentStoreDir).build().run();
+            if (returnCode != 0) {
+                return 1;
+            }
+
+            watch = Stopwatch.createStarted();
+            System.out.printf("Uploading local repository to %s \n", path);
+            result = migrateSegmentStore(localSegmentStoreDir.getAbsolutePath(), path, outWriter, errWriter);
+
+            if (result != 0) {
+                return 1;
+            }
+
+            watch.stop();
+            System.out.printf("Upload took %s \n", printableStopwatch(watch));
+
+            return 0;
+        } finally {
+            try {
+                closer.close();
+            } catch (IOException e) {
+                errWriter.print(e);
+            }
         }
-        printArchives(System.out, afterArchives);
-        System.out.printf("Compaction succeeded in %s.\n", printableStopwatch(watch));
-        return 0;
     }
 
-    private static void printArchives(PrintStream s, List<String> archives) {
-        for (String a : archives) {
-            s.printf("        %s\n", a);
-        }
+    private int migrateSegmentStore(String sourcePath, String targetPath, PrintWriter outWriter, PrintWriter errWriter) {
+        SegmentCopy segmentCopy = SegmentCopy.builder().withSource(sourcePath)
+                .withDestination(targetPath).withOutWriter(outWriter).withErrWriter(errWriter)
+                .withVerbose(true).build();
+        return segmentCopy.run();
+    }
+
+    private static File createTempDir(Closer closer) {
+        File dir = Files.createTempDir();
+        closer.register(() -> FileUtils.deleteDirectory(dir));
+        return dir;
     }
 }

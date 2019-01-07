@@ -51,11 +51,20 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Perform a full-copy of repository data at segment level.
@@ -193,6 +202,8 @@ public class SegmentCopy {
         }
     }
 
+    private static final int READ_THREADS = 20;
+
     private final String source;
 
     private final String destination;
@@ -206,6 +217,8 @@ public class SegmentCopy {
     private SegmentNodeStorePersistence srcPersistence;
 
     private SegmentNodeStorePersistence destPersistence;
+
+    private ExecutorService executor = Executors.newFixedThreadPool(READ_THREADS + 1);
 
     public SegmentCopy(Builder builder) {
         this.source = builder.source;
@@ -242,17 +255,6 @@ public class SegmentCopy {
                         storeDescription(srcType, source)));
             }
 
-            printMessage(outWriter, "Copying archives...");
-            // TODO: copy only segments not transfered
-            IOMonitor ioMonitor = new IOMonitorAdapter();
-            FileStoreMonitor fileStoreMonitor = new FileStoreMonitorAdapter();
-
-            SegmentArchiveManager srcArchiveManager = srcPersistence.createArchiveManager(false, false, ioMonitor,
-                    fileStoreMonitor);
-            SegmentArchiveManager destArchiveManager = destPersistence.createArchiveManager(false, false, ioMonitor,
-                    fileStoreMonitor);
-            copyArchives(srcArchiveManager, destArchiveManager);
-
             printMessage(outWriter, "Copying journal...");
             // TODO: delete destination journal file if present
             JournalFile srcJournal = srcPersistence.getJournalFile();
@@ -273,6 +275,17 @@ public class SegmentCopy {
             ManifestFile destManifest = destPersistence.getManifestFile();
             Properties properties = srcManifest.load();
             destManifest.save(properties);
+
+            printMessage(outWriter, "Copying archives...");
+            // TODO: copy only segments not transfered
+            IOMonitor ioMonitor = new IOMonitorAdapter();
+            FileStoreMonitor fileStoreMonitor = new FileStoreMonitorAdapter();
+
+            SegmentArchiveManager srcArchiveManager = srcPersistence.createArchiveManager(false, false, ioMonitor,
+                    fileStoreMonitor);
+            SegmentArchiveManager destArchiveManager = destPersistence.createArchiveManager(false, false, ioMonitor,
+                    fileStoreMonitor);
+            copyArchives(srcArchiveManager, destArchiveManager);
         } catch (Exception e) {
             watch.stop();
             printMessage(errWriter, "A problem occured while copying archives from {0} to {1} ", source, destination);
@@ -297,7 +310,7 @@ public class SegmentCopy {
     }
 
     private void copyArchives(SegmentArchiveManager srcArchiveManager, SegmentArchiveManager destArchiveManager)
-            throws IOException {
+            throws IOException, InterruptedException, ExecutionException {
         List<String> srcArchiveNames = srcArchiveManager.listArchives();
         Collections.sort(srcArchiveNames);
         int archiveCount = srcArchiveNames.size();
@@ -310,45 +323,113 @@ public class SegmentCopy {
                 printMessage(outWriter, "    |");
             }
 
-            SegmentArchiveWriter archiveWriter = destArchiveManager.create(archiveName);
-            SegmentArchiveReader archiveReader = srcArchiveManager.open(archiveName);
-            List<SegmentArchiveEntry> segmentEntries = archiveReader.listSegments();
-            for (SegmentArchiveEntry segmentEntry : segmentEntries) {
-                writeSegment(segmentEntry, archiveReader, archiveWriter);
+            try (SegmentArchiveReader archiveReader = srcArchiveManager.forceOpen(archiveName)) {
+                SegmentArchiveWriter archiveWriter = destArchiveManager.create(archiveName);
+                try {
+                    migrateSegments(archiveReader, archiveWriter);
+                    migrateBinaryRef(archiveReader, archiveWriter);
+                    migrateGraph(archiveReader, archiveWriter);
+                } catch (Exception e) {
+                    printMessage(errWriter, "An exception occurred while copying segments: {0}", e);
+                } finally {
+                    archiveWriter.close();
+                }
             }
-
-            Buffer binRefBuffer = archiveReader.getBinaryReferences();
-            byte[] binRefData = fetchByteArray(binRefBuffer);
-
-            archiveWriter.writeBinaryReferences(binRefData);
-
-            Buffer graphBuffer = archiveReader.getGraph();
-            byte[] graphData = fetchByteArray(graphBuffer);
-
-            archiveWriter.writeGraph(graphData);
-            archiveWriter.close();
         }
     }
 
-    private void writeSegment(SegmentArchiveEntry segmentEntry, SegmentArchiveReader archiveReader,
-            SegmentArchiveWriter archiveWriter) throws IOException {
-        long msb = segmentEntry.getMsb();
-        long lsb = segmentEntry.getLsb();
-        if (verbose) {
-            printMessage(outWriter, "    - {0}", new UUID(msb, lsb));
+    private void migrateSegments(SegmentArchiveReader reader, SegmentArchiveWriter writer) throws InterruptedException, ExecutionException {
+        BlockingDeque<Segment> readDeque = new LinkedBlockingDeque<>(READ_THREADS);
+        BlockingDeque<Segment> writeDeque = new LinkedBlockingDeque<>(READ_THREADS);
+        AtomicBoolean processingFinished = new AtomicBoolean(false);
+        AtomicBoolean exception = new AtomicBoolean(false);
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < READ_THREADS; i++) {
+            futures.add(executor.submit(() -> {
+                try {
+                    while (!exception.get() && !(readDeque.isEmpty() && processingFinished.get())) {
+                        Segment segment = readDeque.poll(100, TimeUnit.MILLISECONDS);
+                        if (segment != null) {
+                            segment.read(reader);
+                        }
+                    }
+                    return null;
+                } catch (Exception e) {
+                    exception.set(true);
+                    throw e;
+                }
+            }));
+        }
+        futures.add(executor.submit(() -> {
+            try {
+                while (!exception.get() && !(writeDeque.isEmpty() && processingFinished.get())) {
+                    Segment segment = writeDeque.poll(100, TimeUnit.MILLISECONDS);
+                    if (segment != null) {
+                        while (segment.data == null && !exception.get()) {
+                            Thread.sleep(10);
+                        }
+                        segment.write(writer);
+                    }
+                }
+                return null;
+            } catch (Exception e) {
+                exception.set(true);
+                throw e;
+            }
+        }));
+        for (SegmentArchiveEntry entry : reader.listSegments()) {
+            Segment segment = new Segment(entry);
+            readDeque.putLast(segment);
+            writeDeque.putLast(segment);
+        }
+        processingFinished.set(true);
+        for (Future<?> future : futures) {
+            future.get();
+        }
+    }
+
+    private void migrateBinaryRef(SegmentArchiveReader reader, SegmentArchiveWriter writer) throws IOException {
+        Buffer binaryReferences = reader.getBinaryReferences();
+        if (binaryReferences != null) {
+            byte[] array = new byte[binaryReferences.limit()];
+            binaryReferences.get(array);
+            writer.writeBinaryReferences(array);
+        }
+    }
+
+    private void migrateGraph(SegmentArchiveReader reader, SegmentArchiveWriter writer) throws IOException {
+        if (reader.hasGraph()) {
+            Buffer graph = reader.getGraph();
+            byte[] array = new byte[graph.limit()];
+            graph.get(array);
+            writer.writeGraph(array);
+        }
+    }
+
+    private static class Segment {
+
+        private final SegmentArchiveEntry entry;
+
+        private volatile Buffer data;
+
+        private Segment(SegmentArchiveEntry entry) {
+            this.entry = entry;
         }
 
-        int size = segmentEntry.getLength();
-        int offset = 0;
-        int generation = segmentEntry.getGeneration();
-        int fullGeneration = segmentEntry.getFullGeneration();
-        boolean isCompacted = segmentEntry.isCompacted();
+        private void read(SegmentArchiveReader reader) throws IOException {
+            data = reader.readSegment(entry.getMsb(), entry.getLsb());
+        }
 
-        Buffer byteBuffer = archiveReader.readSegment(msb, lsb);
-        byte[] data = fetchByteArray(byteBuffer);
+        private void write(SegmentArchiveWriter writer) throws IOException {
+            byte[] array = fetchByteArray(data);
+//            System.out.printf("    - %s \n", new UUID(entry.getMsb(), entry.getLsb()));
+            writer.writeSegment(entry.getMsb(), entry.getLsb(), array, 0, entry.getLength(), entry.getGeneration(), entry.getFullGeneration(), entry.isCompacted());
+        }
 
-        archiveWriter.writeSegment(msb, lsb, data, offset, size, generation, fullGeneration, isCompacted);
-        archiveWriter.flush();
+        @Override
+        public String toString() {
+            return new UUID(entry.getMsb(), entry.getLsb()).toString();
+        }
     }
 
     private void copyJournal(JournalFile srcJournal, JournalFile destJournal) throws IOException {
