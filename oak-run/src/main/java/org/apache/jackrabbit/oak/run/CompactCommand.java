@@ -67,7 +67,6 @@ class CompactCommand implements Command {
         if (path.startsWith("az:")) {
             code = AzureCompact.builder()
                     .withPath(path)
-                    .withForce(isTrue(forceArg.value(options)))
                     .withSegmentCacheSize(Integer.getInteger("cache", 256))
                     .withGCLogInterval(Long.getLong("compaction-progress-log", 150000))
                     .build()

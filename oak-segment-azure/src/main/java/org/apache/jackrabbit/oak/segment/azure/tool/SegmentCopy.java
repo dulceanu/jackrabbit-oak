@@ -19,7 +19,6 @@
 package org.apache.jackrabbit.oak.segment.azure.tool;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.fetchByteArray;
 import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.newSegmentNodeStorePersistence;
 import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.printMessage;
 import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.printableStopwatch;
@@ -29,42 +28,13 @@ import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.storeTypeFr
 import com.google.common.base.Stopwatch;
 
 import org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.SegmentStoreType;
-import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitor;
-import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitorAdapter;
-import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitor;
-import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitorAdapter;
-import org.apache.jackrabbit.oak.segment.spi.persistence.GCJournalFile;
-import org.apache.jackrabbit.oak.segment.spi.persistence.JournalFile;
-import org.apache.jackrabbit.oak.segment.spi.persistence.JournalFileReader;
-import org.apache.jackrabbit.oak.segment.spi.persistence.JournalFileWriter;
-import org.apache.jackrabbit.oak.segment.spi.persistence.ManifestFile;
 import org.apache.jackrabbit.oak.segment.spi.persistence.RepositoryLock;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveEntry;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.tool.Check;
-import org.apache.jackrabbit.oak.segment.spi.persistence.Buffer;
 
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.MessageFormat;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
-import java.util.concurrent.BlockingDeque;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Perform a full-copy of repository data at segment level.
@@ -91,8 +61,6 @@ public class SegmentCopy {
         private SegmentNodeStorePersistence srcPersistence;
 
         private SegmentNodeStorePersistence destPersistence;
-
-        private boolean verbose;
 
         private PrintWriter outWriter;
 
@@ -176,19 +144,6 @@ public class SegmentCopy {
         }
 
         /**
-         * Whether to show detailed output about current copy operation or not.
-         *
-         * @param verbose,
-         *            <code>true</code> to print detailed output, <code>false</code>
-         *            otherwise.
-         * @return this builder.
-         */
-        public Builder withVerbose(boolean verbose) {
-            this.verbose = verbose;
-            return this;
-        }
-
-        /**
          * Create an executable version of the {@link Check} command.
          *
          * @return an instance of {@link Runnable}.
@@ -202,13 +157,9 @@ public class SegmentCopy {
         }
     }
 
-    private static final int READ_THREADS = 20;
-
     private final String source;
 
     private final String destination;
-
-    private final boolean verbose;
 
     private final PrintWriter outWriter;
 
@@ -218,14 +169,12 @@ public class SegmentCopy {
 
     private SegmentNodeStorePersistence destPersistence;
 
-    private ExecutorService executor = Executors.newFixedThreadPool(READ_THREADS + 1);
 
     public SegmentCopy(Builder builder) {
         this.source = builder.source;
         this.destination = builder.destination;
         this.srcPersistence = builder.srcPersistence;
         this.destPersistence = builder.destPersistence;
-        this.verbose = builder.verbose;
         this.outWriter = builder.outWriter;
         this.errWriter = builder.errWriter;
     }
@@ -237,6 +186,9 @@ public class SegmentCopy {
         SegmentStoreType srcType = storeTypeFromPathOrUri(source);
         SegmentStoreType destType = storeTypeFromPathOrUri(destination);
 
+        String srcDescription = storeDescription(srcType, source);
+        String destDescription = storeDescription(destType, destination);
+
         try {
             if (srcPersistence == null || destPersistence == null) {
                 srcPersistence = newSegmentNodeStorePersistence(srcType, source);
@@ -244,48 +196,24 @@ public class SegmentCopy {
             }
 
             printMessage(outWriter, "Started segment-copy transfer!");
-            printMessage(outWriter, "Source: {0}", storeDescription(srcType, source));
-            printMessage(outWriter, "Destination: {0}", storeDescription(destType, destination));
+            printMessage(outWriter, "Source: {0}", srcDescription);
+            printMessage(outWriter, "Destination: {0}", destDescription);
 
             try {
-                srcPersistence.lockRepository();
+                srcRepositoryLock = srcPersistence.lockRepository();
             } catch (Exception e) {
                 throw new Exception(MessageFormat.format(
                         "Cannot lock source segment store {0} for starting copying process. Giving up!",
-                        storeDescription(srcType, source)));
+                        srcDescription));
             }
 
-            printMessage(outWriter, "Copying journal...");
-            // TODO: delete destination journal file if present
-            JournalFile srcJournal = srcPersistence.getJournalFile();
-            JournalFile destJournal = destPersistence.getJournalFile();
-            copyJournal(srcJournal, destJournal);
+            SegmentStoreMigrator migrator = new SegmentStoreMigrator.Builder()
+                    .withSourcePersistence(srcPersistence, srcDescription)
+                    .withTargetPersistence(destPersistence, destDescription)
+                    .withOutWriter(outWriter)
+                    .build();
 
-            printMessage(outWriter, "Copying gc journal...");
-            // TODO: delete destination gc journal file if present
-            GCJournalFile srcGcJournal = srcPersistence.getGCJournalFile();
-            GCJournalFile destGcJournal = destPersistence.getGCJournalFile();
-            for (String line : srcGcJournal.readLines()) {
-                destGcJournal.writeLine(line);
-            }
-
-            printMessage(outWriter, "Copying manifest...");
-            // TODO: delete destination manifest file if present
-            ManifestFile srcManifest = srcPersistence.getManifestFile();
-            ManifestFile destManifest = destPersistence.getManifestFile();
-            Properties properties = srcManifest.load();
-            destManifest.save(properties);
-
-            printMessage(outWriter, "Copying archives...");
-            // TODO: copy only segments not transfered
-            IOMonitor ioMonitor = new IOMonitorAdapter();
-            FileStoreMonitor fileStoreMonitor = new FileStoreMonitorAdapter();
-
-            SegmentArchiveManager srcArchiveManager = srcPersistence.createArchiveManager(false, false, ioMonitor,
-                    fileStoreMonitor);
-            SegmentArchiveManager destArchiveManager = destPersistence.createArchiveManager(false, false, ioMonitor,
-                    fileStoreMonitor);
-            copyArchives(srcArchiveManager, destArchiveManager);
+            migrator.migrate();
         } catch (Exception e) {
             watch.stop();
             printMessage(errWriter, "A problem occured while copying archives from {0} to {1} ", source, destination);
@@ -296,8 +224,7 @@ public class SegmentCopy {
                 try {
                     srcRepositoryLock.unlock();
                 } catch (IOException e) {
-                    printMessage(errWriter, "A problem occured while unlocking source repository {0} ",
-                            storeDescription(srcType, source));
+                    printMessage(errWriter, "A problem occured while unlocking source repository {0} ", srcDescription);
                     e.printStackTrace(errWriter);
                 }
             }
@@ -307,145 +234,5 @@ public class SegmentCopy {
         printMessage(outWriter, "Segment-copy succeeded in {0}", printableStopwatch(watch));
 
         return 0;
-    }
-
-    private void copyArchives(SegmentArchiveManager srcArchiveManager, SegmentArchiveManager destArchiveManager)
-            throws IOException, InterruptedException, ExecutionException {
-        List<String> srcArchiveNames = srcArchiveManager.listArchives();
-        Collections.sort(srcArchiveNames);
-        int archiveCount = srcArchiveNames.size();
-        int crtCount = 0;
-
-        for (String archiveName : srcArchiveNames) {
-            crtCount++;
-            printMessage(outWriter, "{0} - {1}/{2}", archiveName, crtCount, archiveCount);
-            if (verbose) {
-                printMessage(outWriter, "    |");
-            }
-
-            try (SegmentArchiveReader archiveReader = srcArchiveManager.forceOpen(archiveName)) {
-                SegmentArchiveWriter archiveWriter = destArchiveManager.create(archiveName);
-                try {
-                    migrateSegments(archiveReader, archiveWriter);
-                    migrateBinaryRef(archiveReader, archiveWriter);
-                    migrateGraph(archiveReader, archiveWriter);
-                } catch (Exception e) {
-                    printMessage(errWriter, "An exception occurred while copying segments: {0}", e);
-                } finally {
-                    archiveWriter.close();
-                }
-            }
-        }
-    }
-
-    private void migrateSegments(SegmentArchiveReader reader, SegmentArchiveWriter writer) throws InterruptedException, ExecutionException {
-        BlockingDeque<Segment> readDeque = new LinkedBlockingDeque<>(READ_THREADS);
-        BlockingDeque<Segment> writeDeque = new LinkedBlockingDeque<>(READ_THREADS);
-        AtomicBoolean processingFinished = new AtomicBoolean(false);
-        AtomicBoolean exception = new AtomicBoolean(false);
-        List<Future<?>> futures = new ArrayList<>();
-        for (int i = 0; i < READ_THREADS; i++) {
-            futures.add(executor.submit(() -> {
-                try {
-                    while (!exception.get() && !(readDeque.isEmpty() && processingFinished.get())) {
-                        Segment segment = readDeque.poll(100, TimeUnit.MILLISECONDS);
-                        if (segment != null) {
-                            segment.read(reader);
-                        }
-                    }
-                    return null;
-                } catch (Exception e) {
-                    exception.set(true);
-                    throw e;
-                }
-            }));
-        }
-        futures.add(executor.submit(() -> {
-            try {
-                while (!exception.get() && !(writeDeque.isEmpty() && processingFinished.get())) {
-                    Segment segment = writeDeque.poll(100, TimeUnit.MILLISECONDS);
-                    if (segment != null) {
-                        while (segment.data == null && !exception.get()) {
-                            Thread.sleep(10);
-                        }
-                        segment.write(writer);
-                    }
-                }
-                return null;
-            } catch (Exception e) {
-                exception.set(true);
-                throw e;
-            }
-        }));
-        for (SegmentArchiveEntry entry : reader.listSegments()) {
-            Segment segment = new Segment(entry);
-            readDeque.putLast(segment);
-            writeDeque.putLast(segment);
-        }
-        processingFinished.set(true);
-        for (Future<?> future : futures) {
-            future.get();
-        }
-    }
-
-    private void migrateBinaryRef(SegmentArchiveReader reader, SegmentArchiveWriter writer) throws IOException {
-        Buffer binaryReferences = reader.getBinaryReferences();
-        if (binaryReferences != null) {
-            byte[] array = new byte[binaryReferences.limit()];
-            binaryReferences.get(array);
-            writer.writeBinaryReferences(array);
-        }
-    }
-
-    private void migrateGraph(SegmentArchiveReader reader, SegmentArchiveWriter writer) throws IOException {
-        if (reader.hasGraph()) {
-            Buffer graph = reader.getGraph();
-            byte[] array = new byte[graph.limit()];
-            graph.get(array);
-            writer.writeGraph(array);
-        }
-    }
-
-    private static class Segment {
-
-        private final SegmentArchiveEntry entry;
-
-        private volatile Buffer data;
-
-        private Segment(SegmentArchiveEntry entry) {
-            this.entry = entry;
-        }
-
-        private void read(SegmentArchiveReader reader) throws IOException {
-            data = reader.readSegment(entry.getMsb(), entry.getLsb());
-        }
-
-        private void write(SegmentArchiveWriter writer) throws IOException {
-            byte[] array = fetchByteArray(data);
-//            System.out.printf("    - %s \n", new UUID(entry.getMsb(), entry.getLsb()));
-            writer.writeSegment(entry.getMsb(), entry.getLsb(), array, 0, entry.getLength(), entry.getGeneration(), entry.getFullGeneration(), entry.isCompacted());
-        }
-
-        @Override
-        public String toString() {
-            return new UUID(entry.getMsb(), entry.getLsb()).toString();
-        }
-    }
-
-    private void copyJournal(JournalFile srcJournal, JournalFile destJournal) throws IOException {
-        try (JournalFileReader srcJournalReader = srcJournal.openJournalReader();
-                JournalFileWriter destJournalWriter = destJournal.openJournalWriter()) {
-
-            Deque<String> linesStack = new ArrayDeque<>();
-            String line = null;
-            while ((line = srcJournalReader.readLine()) != null) {
-                linesStack.push(line);
-            }
-
-            while (!linesStack.isEmpty()) {
-                line = linesStack.pop();
-                destJournalWriter.writeLine(line);
-            }
-        }
     }
 }

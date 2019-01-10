@@ -20,18 +20,18 @@ package org.apache.jackrabbit.oak.segment.azure.tool;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.jackrabbit.oak.segment.SegmentCache.DEFAULT_SEGMENT_CACHE_MB;
-import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.newSegmentNodeStorePersistence;
 import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.printableStopwatch;
+import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.createCloudBlobDirectory;
+import static org.apache.jackrabbit.oak.segment.azure.AzureUtilities.deleteAllEntries;
 
 import com.google.common.base.StandardSystemProperty;
 import com.google.common.base.Stopwatch;
 import com.google.common.io.Closer;
 import com.google.common.io.Files;
+import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.jackrabbit.oak.segment.SegmentCache;
-import org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.SegmentStoreType;
-import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
 import org.apache.jackrabbit.oak.segment.tool.Compact;
 
 import java.io.File;
@@ -59,8 +59,6 @@ public class AzureCompact {
 
         private String path;
 
-        private boolean force;
-
         private long gcLogInterval = 150000;
 
         private int segmentCacheSize = DEFAULT_SEGMENT_CACHE_MB;
@@ -78,19 +76,6 @@ public class AzureCompact {
          */
         public Builder withPath(String path) {
             this.path = checkNotNull(path);
-            return this;
-        }
-
-        /**
-         * Whether to fail if run on an older version of the store of force upgrading
-         * its format.
-         *
-         * @param force
-         *            upgrade iff {@code true}
-         * @return this builder.
-         */
-        public Builder withForce(boolean force) {
-            this.force = force;
             return this;
         }
 
@@ -140,14 +125,11 @@ public class AzureCompact {
 
     private final int segmentCacheSize;
 
-    private final boolean strictVersionCheck;
-
     private final long gcLogInterval;
 
     private AzureCompact(Builder builder) {
         this.path = builder.path;
         this.segmentCacheSize = builder.segmentCacheSize;
-        this.strictVersionCheck = !builder.force;
         this.gcLogInterval = builder.gcLogInterval;
     }
 
@@ -161,9 +143,9 @@ public class AzureCompact {
 
             System.out.printf("Downloading %s to local repository \n", path);
             Stopwatch watch = Stopwatch.createStarted();
-            int result = migrateSegmentStore(path, localSegmentStoreDir.getAbsolutePath(), outWriter, errWriter);
+            int returnCode = migrateSegmentStore(path, localSegmentStoreDir.getAbsolutePath(), outWriter, errWriter);
 
-            if (result != 0) {
+            if (returnCode != 0) {
                 return 1;
             }
 
@@ -171,18 +153,26 @@ public class AzureCompact {
             System.out.printf("Download took %s \n", printableStopwatch(watch));
 
             System.out.printf("Compacting nodes locally... \n");
-            int returnCode = Compact.builder().withMmap(false).withSegmentCacheSize(segmentCacheSize)
+            returnCode = Compact.builder().withMmap(false).withSegmentCacheSize(segmentCacheSize)
                     .withGCLogInterval(gcLogInterval).withOs(StandardSystemProperty.OS_NAME.value())
                     .withPath(localSegmentStoreDir).build().run();
+
             if (returnCode != 0) {
                 return 1;
             }
 
             watch = Stopwatch.createStarted();
-            System.out.printf("Uploading local repository to %s \n", path);
-            result = migrateSegmentStore(localSegmentStoreDir.getAbsolutePath(), path, outWriter, errWriter);
+            System.out.printf("Cleaning up obsolete entries from remote repository %s \n", path);
+            CloudBlobDirectory directory = createCloudBlobDirectory(path.substring(3));
+            deleteAllEntries(directory);
+            watch.stop();
+            System.out.printf("Cleanup took %s \n", printableStopwatch(watch));
 
-            if (result != 0) {
+            watch = Stopwatch.createStarted();
+            System.out.printf("Uploading local repository to %s \n", path);
+            returnCode = migrateSegmentStore(localSegmentStoreDir.getAbsolutePath(), path, outWriter, errWriter);
+
+            if (returnCode != 0) {
                 return 1;
             }
 
@@ -190,6 +180,10 @@ public class AzureCompact {
             System.out.printf("Upload took %s \n", printableStopwatch(watch));
 
             return 0;
+        } catch (IOException e) {
+            System.out.printf("Failed to clean up obsolete entries from remote repository % \n", path);
+            errWriter.print(e);
+            return 1;
         } finally {
             try {
                 closer.close();
@@ -202,7 +196,7 @@ public class AzureCompact {
     private int migrateSegmentStore(String sourcePath, String targetPath, PrintWriter outWriter, PrintWriter errWriter) {
         SegmentCopy segmentCopy = SegmentCopy.builder().withSource(sourcePath)
                 .withDestination(targetPath).withOutWriter(outWriter).withErrWriter(errWriter)
-                .withVerbose(true).build();
+                .build();
         return segmentCopy.run();
     }
 

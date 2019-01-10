@@ -17,11 +17,14 @@
 package org.apache.jackrabbit.oak.segment.azure.tool;
 
 import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.fetchByteArray;
+import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.printMessage;
+import static org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.storeDescription;
 
 import com.microsoft.azure.storage.StorageException;
 import com.microsoft.azure.storage.blob.CloudBlobDirectory;
 
 import org.apache.jackrabbit.oak.segment.azure.AzurePersistence;
+import org.apache.jackrabbit.oak.segment.azure.tool.ToolUtils.SegmentStoreType;
 import org.apache.jackrabbit.oak.segment.file.tar.TarPersistence;
 import org.apache.jackrabbit.oak.segment.spi.monitor.FileStoreMonitorAdapter;
 import org.apache.jackrabbit.oak.segment.spi.monitor.IOMonitorAdapter;
@@ -34,11 +37,10 @@ import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveManager;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveReader;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentArchiveWriter;
 import org.apache.jackrabbit.oak.segment.spi.persistence.SegmentNodeStorePersistence;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,8 +58,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SegmentStoreMigrator {
 
-    private static final Logger log = LoggerFactory.getLogger(SegmentStoreMigrator.class);
-
     private static final int READ_THREADS = 20;
 
     private final SegmentNodeStorePersistence source;
@@ -68,6 +68,8 @@ public class SegmentStoreMigrator {
 
     private final String targetName;
 
+    private PrintWriter outWriter;
+
     private ExecutorService executor = Executors.newFixedThreadPool(READ_THREADS + 1);
 
     private SegmentStoreMigrator(Builder builder) {
@@ -75,6 +77,7 @@ public class SegmentStoreMigrator {
         this.target = builder.target;
         this.sourceName = builder.sourceName;
         this.targetName = builder.targetName;
+        this.outWriter = builder.outWriter;
     }
 
     public void migrate() throws IOException, ExecutionException, InterruptedException {
@@ -85,9 +88,9 @@ public class SegmentStoreMigrator {
     }
 
     private void migrateJournal() throws IOException {
-        log.info("{}/journal.log -> {}", sourceName, targetName);
+        printMessage(outWriter, "{0}/journal.log -> {1}", sourceName, targetName);
         if (!source.getJournalFile().exists()) {
-            log.info("No journal at {}; skipping.", sourceName);
+            printMessage(outWriter, "No journal at {0}; skipping.", sourceName);
             return;
         }
         List<String> journal = new ArrayList<>();
@@ -106,7 +109,7 @@ public class SegmentStoreMigrator {
     }
 
     private void migrateGCJournal() throws IOException {
-        log.info("{}/gc.log -> {}", sourceName, targetName);
+        printMessage(outWriter, "{0}/gc.log -> {1}", sourceName, targetName);
         GCJournalFile targetGCJournal = target.getGCJournalFile();
         for (String line : source.getGCJournalFile().readLines()) {
             targetGCJournal.writeLine(line);
@@ -114,9 +117,9 @@ public class SegmentStoreMigrator {
     }
 
     private void migrateManifest() throws IOException {
-        log.info("{}/manifest -> {}", sourceName, targetName);
+        printMessage(outWriter, "{0}/manifest -> {1}", sourceName, targetName);
         if (!source.getManifestFile().exists()) {
-            log.info("No manifest at {}; skipping.", sourceName);
+            printMessage(outWriter, "No manifest at {0}; skipping.", sourceName);
             return;
         }
         Properties manifest = source.getManifestFile().load();
@@ -125,7 +128,7 @@ public class SegmentStoreMigrator {
 
     private void migrateArchives() throws IOException, ExecutionException, InterruptedException {
         if (!source.segmentFilesExist()) {
-            log.info("No segment archives at {}; skipping.", sourceName);
+            printMessage(outWriter, "No segment archives at {0}; skipping.", sourceName);
             return;
         }
         SegmentArchiveManager sourceManager = source.createArchiveManager(false, false, new IOMonitorAdapter(),
@@ -133,7 +136,7 @@ public class SegmentStoreMigrator {
         SegmentArchiveManager targetManager = target.createArchiveManager(false, false, new IOMonitorAdapter(),
                 new FileStoreMonitorAdapter());
         for (String archiveName : sourceManager.listArchives()) {
-            log.info("{}/{} -> {}", sourceName, archiveName, targetName);
+            printMessage(outWriter, "{0}/{1} -> {2}", sourceName, archiveName, targetName);
             try (SegmentArchiveReader reader = sourceManager.forceOpen(archiveName)) {
                 SegmentArchiveWriter writer = targetManager.create(archiveName);
                 try {
@@ -251,33 +254,51 @@ public class SegmentStoreMigrator {
 
         private String targetName;
 
+        private PrintWriter outWriter;
+
         public Builder withSource(File dir) {
             this.source = new TarPersistence(dir);
-            this.sourceName = dir.getPath();
+            this.sourceName = storeDescription(SegmentStoreType.TAR, dir.getPath());
             return this;
         }
 
         public Builder withSource(CloudBlobDirectory dir) throws URISyntaxException, StorageException {
             this.source = new AzurePersistence(dir);
-            this.sourceName = dir.getContainer().getName();
+            this.sourceName = storeDescription(SegmentStoreType.AZURE, dir.getContainer().getName() + "/" + dir.getPrefix());
+            return this;
+        }
+
+        public Builder withSourcePersistence(SegmentNodeStorePersistence source, String sourceName) {
+            this.source = source;
+            this.sourceName = sourceName;
+            return this;
+        }
+
+        public Builder withTargetPersistence(SegmentNodeStorePersistence target, String targetName) {
+            this.target = target;
+            this.targetName = targetName;
             return this;
         }
 
         public Builder withTarget(File dir) {
             this.target = new TarPersistence(dir);
-            this.targetName = dir.getPath();
+            this.targetName = storeDescription(SegmentStoreType.TAR, dir.getPath());
             return this;
         }
 
         public Builder withTarget(CloudBlobDirectory dir) throws URISyntaxException, StorageException {
             this.target = new AzurePersistence(dir);
-            this.targetName = dir.getContainer().getName();
+            this.targetName = storeDescription(SegmentStoreType.AZURE, dir.getContainer().getName() + "/" + dir.getPrefix());
+            return this;
+        }
+
+        public Builder withOutWriter(PrintWriter outWriter) {
+            this.outWriter = outWriter;
             return this;
         }
 
         public SegmentStoreMigrator build() {
             return new SegmentStoreMigrator(this);
         }
-
     }
 }
